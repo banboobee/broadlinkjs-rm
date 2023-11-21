@@ -248,7 +248,7 @@ class Broadlink extends EventEmitter {
     }
 
     // The Broadlink device is something we can use.
-    const device = new Device(host, macAddress, deviceType)
+      const device = new Device(log, host, macAddress, deviceType)
     device.log = log;
     device.debug = debug;
 
@@ -265,11 +265,12 @@ class Broadlink extends EventEmitter {
 
 class Device {
 
-  constructor (host, macAddress, deviceType, port) {
+    constructor (log, host, macAddress, deviceType, port) {
     this.host = host;
     this.mac = macAddress;
     this.emitter = new EventEmitter();
-    this.log = console.log;
+    // this.log = console.log;
+    this.log = log;
     this.type = deviceType;
     this.model = rmDeviceTypes[parseInt(deviceType, 16)] || rmPlusDeviceTypes[parseInt(deviceType, 16)] || rm4DeviceTypes[parseInt(deviceType, 16)] || rm4PlusDeviceTypes[parseInt(deviceType, 16)];
 
