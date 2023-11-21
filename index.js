@@ -248,7 +248,7 @@ class Broadlink extends EventEmitter {
     }
 
     // The Broadlink device is something we can use.
-      const device = new Device(log, host, macAddress, deviceType)
+    const device = new Device(log, host, macAddress, deviceType)
     device.log = log;
     device.debug = debug;
 
