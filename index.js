@@ -334,7 +334,8 @@ class Device {
 
       if (!payload) return false;
 
-      if (debug && response) log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex'), 'command: ', '0x'+response[0x26].toString(16));
+      // /*if (debug && response)*/ log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex'), 'command: ', '0x'+response[0x26].toString(16));
+      if (debug && response) log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex').substring(0, 0x38*2)+payload.toString('hex'), 'command: ', '0x'+response[0x26].toString(16));
 
       const command = response[0x26];
       if (command == 0xe9) {
@@ -455,6 +456,8 @@ class Device {
     packet[0x20] = checksum & 0xff;
     packet[0x21] = checksum >> 8;
 
+    if (debug) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Sending packet: ${packet.toString('hex')}`);
+
     socket.send(packet, 0, packet.length, this.host.port, this.host.address, (err) => {
       if (debug && err) log('\x1b[33m[DEBUG]\x1b[0m send packet error', err);
       callback?.(err);
@@ -546,15 +549,15 @@ class Device {
     await new Promise((resolve, reject) => {
       this.sendPacket(0x6a, packet, debug, async (err) => {
 	const timeout = setTimeout(() => {
-	  reject(new Error(`Timed out of 2 second(s) in response to command.`));
-	}, 2*1000);
+	  reject(new Error(`Timed out of 1 second(s) in response to command.`));
+	}, 1*1000);
 	if (err) {
 	  reject(err);	// sendPacket error
 	} else {
 	  await this.once('Response', (payload) => {
 	    const response = payload.toString('hex');
 	    const source = packet.toString('hex').substring(0,32);
-	    log(`\x1b[33m[DEBUG]\x1b[0m Response: ${response}, source: ${source}`);
+	    log(`\x1b[33m[DEBUG]\x1b[0m Device: ${this.mac.toString('hex')} Response: ${response}, source: ${source} count: ${this.emitter.listenerCount('Response')}`);
 	    if (response === source) {
 	      resolve();
 	    } else {
