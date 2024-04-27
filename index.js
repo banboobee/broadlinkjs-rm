@@ -286,6 +286,7 @@ class Device {
 
     this.on = this.emitter.on;
     this.once = this.emitter.once;
+    this.removeAllListeners = this.emitter.removeAllListeners;
     this.emit = this.emitter.emit;
     this.removeListener = this.emitter.removeListener;
 
@@ -318,11 +319,9 @@ class Device {
       const encryptedPayload = Buffer.alloc(response.length - 0x38, 0);
       response.copy(encryptedPayload, 0, 0x38);
 
+      const command = response[0x26];
       const err = response[0x22] | (response[0x23] << 8);
-      if (err != 0) {
-	/* if (debug) */ log('\x1b[33m[DEBUG]\x1b[0m Error response: ', response.toString('hex'), 'error: ', err);
-	return;
-      }
+      const ix = response[0x28] | (response[0x29] << 8);
 
       const decipher = crypto.createDecipheriv('aes-128-cbc', this.key, this.iv);
       decipher.setAutoPadding(false);
@@ -332,12 +331,21 @@ class Device {
       const p2 = decipher.final();
       if (p2) payload = Buffer.concat([payload, p2]);
 
-      if (!payload) return false;
+      if (!payload) {
+	/* if (debug) */ log('\x1b[33m[DEBUG]\x1b[0m Empty payload:', response.toString('hex'), 'command:', '0x'+response[0x26].toString(16), 'error:', '0x'+err.toString(16));
+	return false;
+      }
 
+      const param = payload[0];
+      if (err != 0 && param !== 0x04) {
+	if (debug) log('\x1b[33m[DEBUG]\x1b[0m Error response:', response.toString('hex'), 'command:', '0x'+response[0x26].toString(16), 'error:', '0x'+err.toString(16));
+	return;
+      }
+      
       // /*if (debug && response)*/ log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex'), 'command: ', '0x'+response[0x26].toString(16));
-      if (debug && response) log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex').substring(0, 0x38*2)+payload.toString('hex'), 'command: ', '0x'+response[0x26].toString(16));
+      if (debug && response) log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex').substring(0, 0x38*2)+payload.toString('hex'), 'command:', '0x'+command.toString(16), 'ix:', ix);
 
-      const command = response[0x26];
+      // const command = response[0x26];
       if (command == 0xe9) {
         this.key = Buffer.alloc(0x10, 0);
         payload.copy(this.key, 0, 0x04, 0x14);
@@ -355,7 +363,7 @@ class Device {
         if (indexOfHeader > -1) {
           payload = payload.slice(indexOfHeader + this.request_header.length, payload.length);
         }
-        this.onPayloadReceived(err, payload);
+        this.onPayloadReceived(err, ix, payload);
       } else if (command == 0x72) {
         log('\x1b[35m[INFO]\x1b[0m Command Acknowledged');
       } else {
@@ -399,7 +407,7 @@ class Device {
 
   sendPacket (command, payload, debug = false, callback = null) {
     const { log, socket } = this;
-    debug = this.debug;
+    //debug = this.debug;
     this.count = (this.count + 1) & 0xffff;
 
     let packet = Buffer.alloc(0x38, 0);
@@ -456,15 +464,15 @@ class Device {
     packet[0x20] = checksum & 0xff;
     packet[0x21] = checksum >> 8;
 
-    if (debug) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Sending packet: ${packet.toString('hex')}`);
+    if (debug) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Sending packet: ${packet.toString('hex')} ix:${this.count}`);
 
     socket.send(packet, 0, packet.length, this.host.port, this.host.address, (err) => {
       if (debug && err) log('\x1b[33m[DEBUG]\x1b[0m send packet error', err);
-      callback?.(err);
+      callback?.(err, this.count);
     })
   }	     
 
-  onPayloadReceived (err, payload) {
+  onPayloadReceived (err, ix, payload) {
     const param = payload[0];
     const { log, debug } = this;
 
@@ -477,14 +485,22 @@ class Device {
         break;
       }
       case 0x02: {
-	// log(`Response: ${payload.toString('hex')}`)
-        this.emit('Response', payload);
+        this.emit('sendData', err, ix, payload);
+        break;
+      }
+      case 0x03: {
+        this.emit('enterLearning', err, ix, payload);
         break;
       }
       case 0x04: { //get from check_data
-        const data = Buffer.alloc(payload.length - 4, 0);
-        payload.copy(data, 0, 4);
-        this.emit('rawData', data);
+        // const data = Buffer.alloc(payload.length - 4, 0);
+        // payload.copy(data, 0, 4);
+        // this.emit('rawData', data);
+        this.emit('checkData', err, ix, payload);
+        break;
+      }
+      case 0x1e: {
+        this.emit('cancelLearning', err, ix, payload);
         break;
       }
       case 0x09: { // Check RF Frequency found from RM4 Pro
@@ -501,7 +517,7 @@ class Device {
         this.emit('rawData', payload);
         break;
       }
-      case 0xa: { //RM3 Check temperature and humidity
+      case 0x0a: { //RM3 Check temperature and humidity
         const temp = (payload[0x6] * 100 + payload[0x7]) / 100.0;
         const humidity = (payload[0x8] * 100 + payload[0x9]) / 100.0;
         this.emit('temperature',temp, humidity);
@@ -536,43 +552,58 @@ class Device {
 
   // Externally Accessed Methods
 
-  checkData() {
+  async sendPacketSync(command, packet, debug = false) {
+    const { log } = this;
+    const x = new Error('Trace:');
+    return await new Promise((resolve, reject) => {
+      this.sendPacket(0x6a, packet, debug, async (senderr, ix0) => {
+	if (senderr) {
+	  return reject(`${senderr}`);	// sendPacket error
+	}
+	const timeout = setTimeout(() => {
+	  this.removeAllListeners(command);
+	  return reject(`Timed out of 10 second(s) in response to ${command}. source:${ix0}`);
+	}, 10*1000);
+	await this.once(command, (status, ix, payload) => {
+	  clearTimeout(timeout);
+	  if (ix0 !== ix) {
+	    return reject(`Unexpected command sequence of ${command}. source:${ix0} response:${ix}`);
+	  }
+	  if (status) {
+	    if (debug) log(`\x1b[33m[DEBUG]\x1b[0m Error response of ${command}. source:${ix0} Device:${this.mac.toString('hex')} listener:${this.emitter.listenerCount(command)}`);
+	    resolve(null);
+	  } else {
+	    if (debug) log(`\x1b[33m[DEBUG]\x1b[0m Succeed response of ${command}. source:${ix0} Device:${this.mac.toString('hex')} listener:${this.emitter.listenerCount(command)}`);
+	    resolve(payload);
+	  }
+	})
+      });
+    }).catch((e) => {
+      if (debug) log(`Failed to send/receive packet. ${e} Device:${this.mac.toString('hex')} ${x.stack.substring(7)}`);
+    })
+  }
+  
+  async checkData(debug = true) {
     let packet = new Buffer([0x04]);
     packet = Buffer.concat([this.request_header, packet]);
-    this.sendPacket(0x6a, packet);
+    const payload = await this.sendPacketSync('checkData', packet, debug)
+    if (payload) {
+      const data = Buffer.alloc(payload.length - 4, 0);
+      payload.copy(data, 0, 4);
+      this.emit('rawData', data);
+    }
   }
 
-  async sendData (data, debug = false) {
-    const { log } = this;
+  async sendData (data, debug = true) {
     let packet = new Buffer([0x02, 0x00, 0x00, 0x00]);
     packet = Buffer.concat([this.code_sending_header, packet, data]);
-    await new Promise((resolve, reject) => {
-      this.sendPacket(0x6a, packet, debug, async (err) => {
-	const timeout = setTimeout(() => {
-	  reject(new Error(`Timed out of 1 second(s) in response to command.`));
-	}, 1*1000);
-	if (err) {
-	  reject(err);	// sendPacket error
-	} else {
-	  await this.once('Response', (payload) => {
-	    const response = payload.toString('hex');
-	    const source = packet.toString('hex').substring(0,32);
-	    log(`\x1b[33m[DEBUG]\x1b[0m Device: ${this.mac.toString('hex')} Response: ${response}, source: ${source} count: ${this.emitter.listenerCount('Response')}`);
-	    if (response === source) {
-	      resolve();
-	    } else {
-	      reject(new Error(`Response ${response} does not match with source ${source}.`));
-	    }
-	  })
-	}
-      });
-    }).catch((e) => log.error(`Failed to send packet. ${e.message} Device:${this.mac.toString('hex')}`));
+    await this.sendPacketSync('sendData', packet, debug)
   }
 
-  enterLearning() {
+  async enterLearning(debug = true) {
     let packet = new Buffer([0x03]);
     packet = Buffer.concat([this.request_header, packet]);
-    this.sendPacket(0x6a, packet);
+    await this.sendPacketSync('enterLearning', packet, debug)
   }
 
   checkTemperature() {
@@ -587,10 +618,10 @@ class Device {
     this.sendPacket(0x6a, packet);
   }
 
-  cancelLearn() {
+  async cancelLearn(debug = true) {
     let packet = new Buffer([0x1e]);
     packet = Buffer.concat([this.request_header, packet]);
-    this.sendPacket(0x6a, packet);
+    await this.sendPacketSync('cancelLearning', packet, debug)
   }
 
   addRFSupport() {
