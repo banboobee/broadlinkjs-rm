@@ -286,7 +286,6 @@ class Device {
 
     this.on = this.emitter.on;
     this.once = this.emitter.once;
-    this.removeAllListeners = this.emitter.removeAllListeners;
     this.emit = this.emitter.emit;
     this.removeListener = this.emitter.removeListener;
 
@@ -363,7 +362,11 @@ class Device {
         if (indexOfHeader > -1) {
           payload = payload.slice(indexOfHeader + this.request_header.length, payload.length);
         }
-        this.onPayloadReceived(err, ix, payload);
+	if (this.onPayloadReceivedSync(err, ix, payload)) {
+	  return;
+	} else {
+          this.onPayloadReceived(err, payload);	// conventional methods
+	}
       } else if (command == 0x72) {
         log('\x1b[35m[INFO]\x1b[0m Command Acknowledged');
       } else {
@@ -472,36 +475,53 @@ class Device {
     })
   }	     
 
-  onPayloadReceived (err, ix, payload) {
+  onPayloadReceivedSync (err, ix, payload) {
     const param = payload[0];
     const { log, debug } = this;
 
     if (debug) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Payload received: ${payload.toString('hex')} param: ${param}`);
 
     switch (param) {
-      case 0x01: { //RM3 Check temperature
+      case 0x02: {
+        this.emit('sendData', err, ix, payload);
+        return true;
+      }
+      case 0x03: {
+        this.emit('enterLearning', err, ix, payload);
+        return true;
+      }
+      case 0x04: {
+        this.emit('checkData', err, ix, payload);
+        return true;
+      }
+      case 0x1e: {
+        this.emit('cancelLearning', err, ix, payload);
+        return true;
+      }
+    }
+    if (err) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  onPayloadReceived (err, payload) {
+    const param = payload[0];
+    const { log, debug } = this;
+
+    // if (debug) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Payload received: ${payload.toString('hex')}`);
+
+    switch (param) {
+      case 0x1: { //RM3 Check temperature
         const temp = (payload[0x4] * 10 + payload[0x5]) / 10.0;
         this.emit('temperature', temp);
         break;
       }
-      case 0x02: {
-        this.emit('sendData', err, ix, payload);
-        break;
-      }
-      case 0x03: {
-        this.emit('enterLearning', err, ix, payload);
-        break;
-      }
-      case 0x04: { //get from check_data
-        // const data = Buffer.alloc(payload.length - 4, 0);
-        // payload.copy(data, 0, 4);
-        // this.emit('rawData', data);
-        this.emit('checkData', err, ix, payload);
-        break;
-      }
-      case 0x1e: {
-        this.emit('cancelLearning', err, ix, payload);
-        break;
+      case 0x4: { //get from check_data
+        const data = Buffer.alloc(payload.length - 4, 0);
+        payload.copy(data, 0, 4);
+        this.emit('rawData', data);
       }
       case 0x09: { // Check RF Frequency found from RM4 Pro
         const data = Buffer.alloc(1, 0);
@@ -517,7 +537,7 @@ class Device {
         this.emit('rawData', payload);
         break;
       }
-      case 0x0a: { //RM3 Check temperature and humidity
+      case 0xa: { //RM3 Check temperature and humidity
         const temp = (payload[0x6] * 100 + payload[0x7]) / 100.0;
         const humidity = (payload[0x8] * 100 + payload[0x9]) / 100.0;
         this.emit('temperature',temp, humidity);
@@ -561,10 +581,10 @@ class Device {
 	  return reject(`${senderr}`);	// sendPacket error
 	}
 	const timeout = setTimeout(() => {
-	  this.removeAllListeners(command);
+	  this.removeListener(command, listener);
 	  return reject(`Timed out of 10 second(s) in response to ${command}. source:${ix0}`);
 	}, 10*1000);
-	await this.once(command, (status, ix, payload) => {
+	const listener = (status, ix, payload) => {
 	  clearTimeout(timeout);
 	  if (ix0 !== ix) {
 	    return reject(`Unexpected command sequence of ${command}. source:${ix0} response:${ix}`);
@@ -576,7 +596,8 @@ class Device {
 	    if (debug) log(`\x1b[33m[DEBUG]\x1b[0m Succeed response of ${command}. source:${ix0} Device:${this.mac.toString('hex')} listener:${this.emitter.listenerCount(command)}`);
 	    resolve(payload);
 	  }
-	})
+	}
+	await this.once(command, listener);
       });
     }).catch((e) => {
       if (debug) log(`Failed to send/receive packet. ${e} Device:${this.mac.toString('hex')} ${x.stack.substring(7)}`);
