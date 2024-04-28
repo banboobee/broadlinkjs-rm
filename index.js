@@ -276,12 +276,12 @@ class Device {
 
     //Use different headers for rm4 devices
     this.rm4Type = (rm4DeviceTypes[parseInt(deviceType, 16)] || rm4PlusDeviceTypes[parseInt(deviceType, 16)])
-    this.request_header = this.rm4Type ? new Buffer([0x04, 0x00]) : new Buffer([]);
-    this.code_sending_header = this.rm4Type ? new Buffer([0xda, 0x00]) : new Buffer([]);
+    this.request_header = this.rm4Type ? new Buffer.from([0x04, 0x00]) : new Buffer.from([]);
+    this.code_sending_header = this.rm4Type ? new Buffer.from([0xda, 0x00]) : new Buffer.from([]);
     //except 5f36 and 6508 ¯\_(ツ)_/¯
     if (deviceType == 0x5f36 || deviceType == 0x6508) {
-      this.code_sending_header = new Buffer([0xd0, 0x00]);
-      this.request_header = new Buffer([0x04, 0x00]);
+      this.code_sending_header = new Buffer.from([0xd0, 0x00]);
+      this.request_header = new Buffer.from([0x04, 0x00]);
     }
 
     this.on = this.emitter.on;
@@ -290,9 +290,9 @@ class Device {
     this.removeListener = this.emitter.removeListener;
 
     this.count = Math.random() & 0xffff;
-    this.key = new Buffer([0x09, 0x76, 0x28, 0x34, 0x3f, 0xe9, 0x9e, 0x23, 0x76, 0x5c, 0x15, 0x13, 0xac, 0xcf, 0x8b, 0x02]);
-    this.iv = new Buffer([0x56, 0x2e, 0x17, 0x99, 0x6d, 0x09, 0x3d, 0x28, 0xdd, 0xb3, 0xba, 0x69, 0x5a, 0x2e, 0x6f, 0x58]);
-    this.id = new Buffer([0, 0, 0, 0]);
+    this.key = new Buffer.from([0x09, 0x76, 0x28, 0x34, 0x3f, 0xe9, 0x9e, 0x23, 0x76, 0x5c, 0x15, 0x13, 0xac, 0xcf, 0x8b, 0x02]);
+    this.iv = new Buffer.from([0x56, 0x2e, 0x17, 0x99, 0x6d, 0x09, 0x3d, 0x28, 0xdd, 0xb3, 0xba, 0x69, 0x5a, 0x2e, 0x6f, 0x58]);
+    this.id = new Buffer.from([0, 0, 0, 0]);
 
     this.setupSocket();
 
@@ -605,7 +605,7 @@ class Device {
   }
   
   async checkData(debug = true) {
-    let packet = new Buffer([0x04]);
+    let packet = new Buffer.from([0x04]);
     packet = Buffer.concat([this.request_header, packet]);
     const payload = await this.sendPacketSync('checkData', packet, debug)
     if (payload) {
@@ -616,50 +616,50 @@ class Device {
   }
 
   async sendData (data, debug = true) {
-    let packet = new Buffer([0x02, 0x00, 0x00, 0x00]);
+    let packet = new Buffer.from([0x02, 0x00, 0x00, 0x00]);
     packet = Buffer.concat([this.code_sending_header, packet, data]);
     await this.sendPacketSync('sendData', packet, debug)
   }
 
   async enterLearning(debug = true) {
-    let packet = new Buffer([0x03]);
+    let packet = new Buffer.from([0x03]);
     packet = Buffer.concat([this.request_header, packet]);
     await this.sendPacketSync('enterLearning', packet, debug)
   }
 
   checkTemperature() {
-    let packet = (rm4DeviceTypes[parseInt(this.type, 16)] || rm4PlusDeviceTypes[parseInt(this.type, 16)]) ? new Buffer([0x24]) : new Buffer([0x1]);
+    let packet = (rm4DeviceTypes[parseInt(this.type, 16)] || rm4PlusDeviceTypes[parseInt(this.type, 16)]) ? new Buffer.from([0x24]) : new Buffer.from([0x1]);
     packet = Buffer.concat([this.request_header, packet]);
     this.sendPacket(0x6a, packet);
   }
 
   checkHumidity() {
-    let packet = (rm4DeviceTypes[parseInt(this.type, 16)] || rm4PlusDeviceTypes[parseInt(this.type, 16)]) ? new Buffer([0x24]) : new Buffer([0x1]);
+    let packet = (rm4DeviceTypes[parseInt(this.type, 16)] || rm4PlusDeviceTypes[parseInt(this.type, 16)]) ? new Buffer.from([0x24]) : new Buffer.from([0x1]);
     packet = Buffer.concat([this.request_header, packet]);
     this.sendPacket(0x6a, packet);
   }
 
   async cancelLearn(debug = true) {
-    let packet = new Buffer([0x1e]);
+    let packet = new Buffer.from([0x1e]);
     packet = Buffer.concat([this.request_header, packet]);
     await this.sendPacketSync('cancelLearning', packet, debug)
   }
 
   addRFSupport() {
     this.enterRFSweep = () => {
-      let packet = new Buffer([0x19]);
+      let packet = new Buffer.from([0x19]);
       packet = Buffer.concat([this.request_header, packet]);
       this.sendPacket(0x6a, packet);
     }
 
     this.checkRFData = () => {
-      let packet = new Buffer([0x1a]);
+      let packet = new Buffer.from([0x1a]);
       packet = Buffer.concat([this.request_header, packet]);
       this.sendPacket(0x6a, packet);
     }
 
     this.checkRFData2 = () => {
-      let packet = new Buffer([0x1b]);
+      let packet = new Buffer.from([0x1b]);
       packet = Buffer.concat([this.request_header, packet]);
       this.sendPacket(0x6a, packet);
     }
