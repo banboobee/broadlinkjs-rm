@@ -335,17 +335,12 @@ class Device {
 	return false;
       }
 
-      const param = payload[0];
-      if (err != 0 && param !== 0x04) {
-	if (debug) log('\x1b[33m[DEBUG]\x1b[0m Error response:', response.toString('hex'), 'command:', '0x'+response[0x26].toString(16), 'error:', '0x'+err.toString(16));
-	return;
-      }
-      
       // /*if (debug && response)*/ log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex'), 'command: ', '0x'+response[0x26].toString(16));
       if (debug && response) log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex').substring(0, 0x38*2)+payload.toString('hex'), 'command:', '0x'+command.toString(16), 'ix:', ix);
 
       // const command = response[0x26];
       if (command == 0xe9) {
+	if (err != 0) return;
         this.key = Buffer.alloc(0x10, 0);
         payload.copy(this.key, 0, 0x04, 0x14);
 
@@ -479,7 +474,7 @@ class Device {
     const param = payload[0];
     const { log, debug } = this;
 
-    if (debug) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Payload received: ${payload.toString('hex')} param: ${param}`);
+    // if (debug) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Payload received: ${payload.toString('hex')} param: ${param}`);
 
     switch (param) {
       case 0x02: {
@@ -510,7 +505,7 @@ class Device {
     const param = payload[0];
     const { log, debug } = this;
 
-    // if (debug) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Payload received: ${payload.toString('hex')}`);
+    if (debug) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Payload received: ${payload.toString('hex')}`);
 
     switch (param) {
       case 0x1: { //RM3 Check temperature
