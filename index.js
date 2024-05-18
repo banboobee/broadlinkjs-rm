@@ -619,7 +619,9 @@ class Device {
       const data = Buffer.alloc(payload.length - 4, 0);
       payload.copy(data, 0, 4);
       this.emit('rawData', data);
+      return data;
     }
+    return null;
   }
 
   async sendData (data, debug = false) {
@@ -649,20 +651,23 @@ class Device {
   async cancelLearn(debug = false) {
     let packet = new Buffer.from([0x1e]);
     packet = Buffer.concat([this.request_header, packet]);
-    await this.sendPacketSync('cancelLearning', packet, debug)
+    await this.sendPacketSync('cancelLearning', packet, debug);
   }
-
+  cancelLearning = this.cancelLearn;
+  cancelSweepFrequency = this.cancelLearn;
+  
   addRFSupport() {
     this.enterRFSweep = async (debug = false) => {
       let packet = new Buffer.from([0x19]);
       packet = Buffer.concat([this.request_header, packet]);
-      await this.sendPacketSync('enterRFSweep', packet, debug)
+      await this.sendPacketSync('enterRFSweep', packet, debug);
     }
+    this.sweepFrequency = this.enterRFSweep;
 
     this.checkRFData = async (debug = false) => {
       let packet = new Buffer.from([0x1a]);
       packet = Buffer.concat([this.request_header, packet]);
-      const payload = await this.sendPacketSync('checkFrequency', packet, debug)
+      const payload = await this.sendPacketSync('checkFrequency', packet, debug);
       if (payload) {
 	// this.log(`Device:${this.mac.toString('hex')} ${payload.toString('hex')}`);
         const data = Buffer.alloc(1, 0);
@@ -670,13 +675,19 @@ class Device {
         if (data[0]) {
 	  this.emit('rawRFData', data);
 	}
+	return {
+	  locked: data[0],
+	  frequency: (data[4] << 24 | data[3] << 16 | data[2] << 8 | data[1])/1000
+	}
       }
+      return null;
     }
+    this.checkFrequency = this.checkRFData;
 
     this.checkRFData2 = async (debug = false) => {
       let packet = new Buffer.from([0x1b]);
       packet = Buffer.concat([this.request_header, packet]);
-      const payload = await this.sendPacketSync('checkRFData', packet, debug)
+      const payload = await this.sendPacketSync('checkRFData', packet, debug);
       if (payload) {
 	// this.log(`Device:${this.mac.toString('hex')} ${payload.toString('hex')}`);
         const data = Buffer.alloc(1, 0);
@@ -684,6 +695,7 @@ class Device {
         this.emit('rawRFData2', data);
       }
     }
+    this.findRFPacket = this.checkRFData2;
   }
 }
 
