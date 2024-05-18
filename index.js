@@ -489,6 +489,18 @@ class Device {
         this.emit('checkData', err, ix, payload);
         return true;
       }
+      case 0x19: {
+        this.emit('enterRFSweep', err, ix, payload);
+        return true;
+      }
+      case 0x1a: {
+        this.emit('checkFrequency', err, ix, payload);
+        return true;
+      }
+      case 0x1b: {
+        this.emit('checkRFData', err, ix, payload);
+        return true;
+      }
       case 0x1e: {
         this.emit('cancelLearning', err, ix, payload);
         return true;
@@ -599,7 +611,7 @@ class Device {
     })
   }
   
-  async checkData(debug = true) {
+  async checkData(debug = false) {
     let packet = new Buffer.from([0x04]);
     packet = Buffer.concat([this.request_header, packet]);
     const payload = await this.sendPacketSync('checkData', packet, debug)
@@ -610,13 +622,13 @@ class Device {
     }
   }
 
-  async sendData (data, debug = true) {
+  async sendData (data, debug = false) {
     let packet = new Buffer.from([0x02, 0x00, 0x00, 0x00]);
     packet = Buffer.concat([this.code_sending_header, packet, data]);
     await this.sendPacketSync('sendData', packet, debug)
   }
 
-  async enterLearning(debug = true) {
+  async enterLearning(debug = false) {
     let packet = new Buffer.from([0x03]);
     packet = Buffer.concat([this.request_header, packet]);
     await this.sendPacketSync('enterLearning', packet, debug)
@@ -634,29 +646,43 @@ class Device {
     this.sendPacket(0x6a, packet);
   }
 
-  async cancelLearn(debug = true) {
+  async cancelLearn(debug = false) {
     let packet = new Buffer.from([0x1e]);
     packet = Buffer.concat([this.request_header, packet]);
     await this.sendPacketSync('cancelLearning', packet, debug)
   }
 
   addRFSupport() {
-    this.enterRFSweep = () => {
+    this.enterRFSweep = async (debug = false) => {
       let packet = new Buffer.from([0x19]);
       packet = Buffer.concat([this.request_header, packet]);
-      this.sendPacket(0x6a, packet);
+      await this.sendPacketSync('enterRFSweep', packet, debug)
     }
 
-    this.checkRFData = () => {
+    this.checkRFData = async (debug = false) => {
       let packet = new Buffer.from([0x1a]);
       packet = Buffer.concat([this.request_header, packet]);
-      this.sendPacket(0x6a, packet);
+      const payload = await this.sendPacketSync('checkFrequency', packet, debug)
+      if (payload) {
+	// this.log(`Device:${this.mac.toString('hex')} ${payload.toString('hex')}`);
+        const data = Buffer.alloc(1, 0);
+        payload.copy(data, 0, 0x4);
+        if (data[0]) {
+	  this.emit('rawRFData', data);
+	}
+      }
     }
 
-    this.checkRFData2 = () => {
+    this.checkRFData2 = async (debug = false) => {
       let packet = new Buffer.from([0x1b]);
       packet = Buffer.concat([this.request_header, packet]);
-      this.sendPacket(0x6a, packet);
+      const payload = await this.sendPacketSync('checkRFData', packet, debug)
+      if (payload) {
+	// this.log(`Device:${this.mac.toString('hex')} ${payload.toString('hex')}`);
+        const data = Buffer.alloc(1, 0);
+        payload.copy(data, 0, 0x4);
+        this.emit('rawRFData2', data);
+      }
     }
   }
 }
