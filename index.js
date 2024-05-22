@@ -477,6 +477,10 @@ class Device {
     // if (debug) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Payload received: ${payload.toString('hex')} param: ${param}`);
 
     switch (param) {
+      case 0x1: {
+        this.emit('checkTemperature', err, ix, payload);
+        break;
+      }
       case 0x02: {
         this.emit('sendData', err, ix, payload);
         return true;
@@ -636,10 +640,23 @@ class Device {
     await this.sendPacketSync('enterLearning', packet, debug)
   }
 
-  checkTemperature() {
-    let packet = (rm4DeviceTypes[parseInt(this.type, 16)] || rm4PlusDeviceTypes[parseInt(this.type, 16)]) ? new Buffer.from([0x24]) : new Buffer.from([0x1]);
-    packet = Buffer.concat([this.request_header, packet]);
-    this.sendPacket(0x6a, packet);
+  async checkTemperature(debug = false) {
+    if (rm4DeviceTypes[parseInt(this.type, 16)] || rm4PlusDeviceTypes[parseInt(this.type, 16)]) {
+      let packet = new Buffer.from([0x24]);
+      packet = Buffer.concat([this.request_header, packet]);
+      this.sendPacket(0x6a, packet);
+    } else {
+      let packet = new Buffer.from([0x1]);
+      packet = Buffer.concat([this.request_header, packet]);
+      const payload = await this.sendPacketSync('checkTemperature', packet, debug)
+      if (payload) {
+        const temp = (payload[0x4] * 10 + payload[0x5]) / 10.0;
+	// this.log(`Device:${this.mac.toString('hex')} Temperature:${temp}`);
+        this.emit('temperature', temp);
+	return temp;
+      }
+      return undefined;
+    }
   }
 
   checkHumidity() {
