@@ -687,23 +687,29 @@ class Device {
       const payload = await this.sendPacketSync('checkFrequency', packet, debug);
       if (payload) {
 	// this.log(`Device:${this.mac.toString('hex')} ${payload.toString('hex')}`);
-        const data = Buffer.alloc(1, 0);
+        const data = Buffer.alloc(5, 0);
         payload.copy(data, 0, 0x4);
         if (data[0]) {
 	  this.emit('rawRFData', data);
 	}
 	return {
 	  locked: data[0],
-	  frequency: (data[4] << 24 | data[3] << 16 | data[2] << 8 | data[1])/1000
+	  //frequency: (data[4] << 24 | data[3] << 16 | data[2] << 8 | data[1])/1000
+	  frequency: data.readUint32LE(1)/1000
 	}
       }
       return null;
     }
     this.checkFrequency = this.checkRFData;
 
-    this.checkRFData2 = async (debug = false) => {
+    this.checkRFData2 = async (frequency, debug = false) => {
       let packet = new Buffer.from([0x1b]);
       packet = Buffer.concat([this.request_header, packet]);
+      if (frequency) {
+	const data = Buffer.alloc(4, 0);
+	data.writeUint32LE(Math.round(frequency * 1000));
+	packet = Buffer.concat([packet, data]);
+      }
       const payload = await this.sendPacketSync('checkRFData', packet, debug);
       if (payload) {
 	// this.log(`Device:${this.mac.toString('hex')} ${payload.toString('hex')}`);
