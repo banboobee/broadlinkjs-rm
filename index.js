@@ -251,6 +251,7 @@ class Broadlink extends EventEmitter {
     const device = new Device(log, host, macAddress, deviceType)
     device.log = log;
     device.debug = debug;
+    device.actives = new Map();
 
     this.devices[macAddress] = device;
 
@@ -336,7 +337,7 @@ class Device {
       }
 
       // /*if (debug && response)*/ log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex'), 'command: ', '0x'+response[0x26].toString(16));
-      if (debug && response) log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex').substring(0, 0x38*2)+payload.toString('hex'), 'command:', '0x'+command.toString(16), 'ix:', ix);
+      if (debug && response) log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex').substring(0, 0x38*2)+' '+payload.toString('hex'), 'command:', '0x'+command.toString(16), 'ix:', ix);
 
       // const command = response[0x26];
       if (command == 0xe9) {
@@ -349,14 +350,14 @@ class Device {
 
         this.emit('deviceReady');
       } else if (command == 0xee || command == 0xef) {
-        const payloadHex = payload.toString('hex');
-        const requestHeaderHex = this.request_header.toString('hex');
+        // const payloadHex = payload.toString('hex');
+        // const requestHeaderHex = this.request_header.toString('hex');
 
-        const indexOfHeader = payloadHex.indexOf(requestHeaderHex);
+        // const indexOfHeader = payloadHex.indexOf(requestHeaderHex);
 
-        if (indexOfHeader > -1) {
-          payload = payload.slice(indexOfHeader + this.request_header.length, payload.length);
-        }
+        // if (indexOfHeader > -1) {
+        //   payload = payload.slice(indexOfHeader + this.request_header.length, payload.length);
+        // }
 	if (this.onPayloadReceivedSync(err, ix, payload)) {
 	  return;
 	} else {
@@ -476,39 +477,11 @@ class Device {
 
     // if (debug) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Payload received: ${payload.toString('hex')} param: ${param}`);
 
-    switch (param) {
-      case 0x1: {
-        this.emit('checkTemperature', err, ix, payload);
-        break;
-      }
-      case 0x02: {
-        this.emit('sendData', err, ix, payload);
-        return true;
-      }
-      case 0x03: {
-        this.emit('enterLearning', err, ix, payload);
-        return true;
-      }
-      case 0x04: {
-        this.emit('checkData', err, ix, payload);
-        return true;
-      }
-      case 0x19: {
-        this.emit('enterRFSweep', err, ix, payload);
-        return true;
-      }
-      case 0x1a: {
-        this.emit('checkFrequency', err, ix, payload);
-        return true;
-      }
-      case 0x1b: {
-        this.emit('checkRFData', err, ix, payload);
-        return true;
-      }
-      case 0x1e: {
-        this.emit('cancelLearning', err, ix, payload);
-        return true;
-      }
+    if (this.actives.has(ix)) {
+      const command = this.actives.get(ix);
+      this.actives.delete(ix);
+      this.emit(command, err, ix, payload);
+      return true;
     }
     if (err) {
       return true;
@@ -588,11 +561,14 @@ class Device {
     const x = new Error('Trace:');
     return await new Promise((resolve, reject) => {
       this.sendPacket(0x6a, packet, debug, async (senderr, ix0) => {
+	this.actives.set(ix0, command);
+	// log(this.actives);
 	if (senderr) {
 	  return reject(`${senderr}`);	// sendPacket error
 	}
 	const timeout = setTimeout(() => {
 	  this.removeListener(command, listener);
+	  this.actives.delete(ix0);
 	  return reject(`Timed out of 10 second(s) in response to ${command}. source:${ix0}`);
 	}, 10*1000);
 	const listener = (status, ix, payload) => {
@@ -616,12 +592,13 @@ class Device {
   }
   
   async checkData(debug = false) {
-    let packet = new Buffer.from([0x04]);
+    let packet = new Buffer.from([0x04, 0x00, 0x00, 0x00]);
     packet = Buffer.concat([this.request_header, packet]);
     const payload = await this.sendPacketSync('checkData', packet, debug)
     if (payload) {
-      const data = Buffer.alloc(payload.length - 4, 0);
-      payload.copy(data, 0, 4);
+      const byte0 = 4 + this.request_header.length;
+      const data = Buffer.alloc(payload.length - byte0, 0);
+      payload.copy(data, 0, byte0);
       this.emit('rawData', data);
       return data;
     }
@@ -630,23 +607,38 @@ class Device {
 
   async sendData (data, debug = false) {
     let packet = new Buffer.from([0x02, 0x00, 0x00, 0x00]);
-    packet = Buffer.concat([this.code_sending_header, packet, data]);
+    let header = Buffer.alloc(this.request_header.length);
+    this.request_header.copy(header); 
+    if (this.request_header.length) header.writeUint16LE(4 + data.length);
+    packet = Buffer.concat([header, packet, data]);
+    // this.log(`Device:${this.mac.toString('hex')} ${packet.toString('hex')}`);
     await this.sendPacketSync('sendData', packet, debug)
   }
 
   async enterLearning(debug = false) {
-    let packet = new Buffer.from([0x03]);
+    let packet = new Buffer.from([0x03, 0x00, 0x00, 0x00]);
     packet = Buffer.concat([this.request_header, packet]);
     await this.sendPacketSync('enterLearning', packet, debug)
   }
 
   async checkTemperature(debug = false) {
-    if (rm4DeviceTypes[parseInt(this.type, 16)] || rm4PlusDeviceTypes[parseInt(this.type, 16)]) {
-      let packet = new Buffer.from([0x24]);
+    if (this.request_header.length) {
+      let packet = new Buffer.from([0x24, 0x00, 0x00, 0x00]);
       packet = Buffer.concat([this.request_header, packet]);
-      this.sendPacket(0x6a, packet);
+      const payload = await this.sendPacketSync('checkSensors', packet, debug)
+      if (payload) {
+        const temp = (payload[0x6] * 10 + payload[0x7]) / 10.0;
+        const humidity = (payload[0x8] * 100 + payload[0x9]) / 100.0;
+	// this.log(`Device:${this.mac.toString('hex')} ${payload.toString('hex')}, temp:${temp}, humidity:${humidity}`);
+        this.emit('temperature',temp, humidity);
+	return {
+          "temperature": temp,
+          "humidity": humidity
+	}
+      }
+      return undefined;
     } else {
-      let packet = new Buffer.from([0x1]);
+      let packet = new Buffer.from([0x1, 0x00, 0x00, 0x00]);
       packet = Buffer.concat([this.request_header, packet]);
       const payload = await this.sendPacketSync('checkTemperature', packet, debug)
       if (payload) {
@@ -658,15 +650,11 @@ class Device {
       return undefined;
     }
   }
-
-  checkHumidity() {
-    let packet = (rm4DeviceTypes[parseInt(this.type, 16)] || rm4PlusDeviceTypes[parseInt(this.type, 16)]) ? new Buffer.from([0x24]) : new Buffer.from([0x1]);
-    packet = Buffer.concat([this.request_header, packet]);
-    this.sendPacket(0x6a, packet);
-  }
+  checkSensors = this.checkTemperature;
+  checkHumidity = this.checkTemperature;
 
   async cancelLearn(debug = false) {
-    let packet = new Buffer.from([0x1e]);
+    let packet = new Buffer.from([0x1e, 0x00, 0x00, 0x00]);
     packet = Buffer.concat([this.request_header, packet]);
     await this.sendPacketSync('cancelLearning', packet, debug);
   }
@@ -675,27 +663,27 @@ class Device {
   
   addRFSupport() {
     this.enterRFSweep = async (debug = false) => {
-      let packet = new Buffer.from([0x19]);
+      let packet = new Buffer.from([0x19, 0x00, 0x00, 0x00]);
       packet = Buffer.concat([this.request_header, packet]);
       await this.sendPacketSync('enterRFSweep', packet, debug);
     }
     this.sweepFrequency = this.enterRFSweep;
 
     this.checkRFData = async (debug = false) => {
-      let packet = new Buffer.from([0x1a]);
+      let packet = new Buffer.from([0x1a, 0x00, 0x00, 0x00]);
       packet = Buffer.concat([this.request_header, packet]);
       const payload = await this.sendPacketSync('checkFrequency', packet, debug);
       if (payload) {
-	// this.log(`Device:${this.mac.toString('hex')} ${payload.toString('hex')}`);
+	const byte0 = 4 + this.request_header.length;
+	// this.log(`Device:${this.mac.toString('hex')} ${payload.toString('hex')} ${payload.readUint32LE(byte0 + 1)/1000}MHz`);
         const data = Buffer.alloc(5, 0);
-        payload.copy(data, 0, 0x4);
-        if (data[0]) {
+        payload.copy(data, 0, byte0);
+        if (payload[byte0]) {
 	  this.emit('rawRFData', data);
 	}
 	return {
-	  locked: data[0],
-	  //frequency: (data[4] << 24 | data[3] << 16 | data[2] << 8 | data[1])/1000
-	  frequency: data.readUint32LE(1)/1000
+	  locked: payload[byte0],
+	  frequency: payload.readUint32LE(byte0 + 1)/1000
 	}
       }
       return null;
@@ -703,18 +691,23 @@ class Device {
     this.checkFrequency = this.checkRFData;
 
     this.checkRFData2 = async (frequency, debug = false) => {
-      let packet = new Buffer.from([0x1b]);
-      packet = Buffer.concat([this.request_header, packet]);
+      let packet = new Buffer.from([0x1b, 0x00, 0x00, 0x00]);
+      let header = Buffer.alloc(this.request_header.length);
+      this.request_header.copy(header); 
+      // packet = Buffer.concat([this.request_header, packet]);
       if (frequency) {
 	const data = Buffer.alloc(4, 0);
 	data.writeUint32LE(Math.round(frequency * 1000));
 	packet = Buffer.concat([packet, data]);
+	if (this.request_header.length) header.writeUint16LE(8);
       }
+      packet = Buffer.concat([header, packet]);
       const payload = await this.sendPacketSync('checkRFData', packet, debug);
       if (payload) {
+	const byte0 = 4 + this.request_header.length;
 	// this.log(`Device:${this.mac.toString('hex')} ${payload.toString('hex')}`);
         const data = Buffer.alloc(1, 0);
-        payload.copy(data, 0, 0x4);
+        payload.copy(data, 0, byte0);
         this.emit('rawRFData2', data);
       }
     }
