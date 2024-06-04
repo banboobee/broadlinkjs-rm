@@ -408,6 +408,7 @@ class Device {
     const { log, socket } = this;
     //debug = this.debug;
     this.count = (this.count + 1) & 0xffff;
+    const ix = this.count;	// save the value before overridden.
 
     let packet = Buffer.alloc(0x38, 0);
 
@@ -463,11 +464,11 @@ class Device {
     packet[0x20] = checksum & 0xff;
     packet[0x21] = checksum >> 8;
 
-    if (debug) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Sending packet: ${packet.toString('hex')} ix:${this.count}`);
+    if (debug) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Sending packet: ${packet.toString('hex')} ix:${ix}`);
 
     socket.send(packet, 0, packet.length, this.host.port, this.host.address, (err) => {
       if (debug && err) log('\x1b[33m[DEBUG]\x1b[0m send packet error', err);
-      callback?.(err, this.count);
+      callback?.(err, ix);
     })
   }	     
 
@@ -561,21 +562,22 @@ class Device {
     const x = new Error('Trace:');
     return await new Promise((resolve, reject) => {
       this.sendPacket(0x6a, packet, debug, async (senderr, ix0) => {
-	this.actives.set(ix0, command);
+	const commandx = `${command}${ix0}`;
+	this.actives.set(ix0, commandx);
 	// log(this.actives);
 	if (senderr) {
 	  return reject(`${senderr}`);	// sendPacket error
 	}
 	const timeout = setTimeout(() => {
-	  this.removeListener(command, listener);
+	  this.removeListener(commandx, listener);
 	  this.actives.delete(ix0);
 	  return reject(`Timed out of 10 second(s) in response to ${command}. source:${ix0}`);
 	}, 10*1000);
 	const listener = (status, ix, payload) => {
 	  clearTimeout(timeout);
-	  if (ix0 !== ix) {
-	    return reject(`Unexpected command sequence of ${command}. source:${ix0} response:${ix}`);
-	  }
+	  // if (ix0 !== ix) {
+	  //   return reject(`Unexpected command sequence of ${command}. source:${ix0} response:${ix}`);
+	  // }
 	  if (status) {
 	    if (debug) log(`\x1b[33m[DEBUG]\x1b[0m Error response of ${command}. source:${ix0} Device:${this.mac.toString('hex')} listener:${this.emitter.listenerCount(command)}`);
 	    resolve(null);
@@ -584,7 +586,7 @@ class Device {
 	    resolve(payload);
 	  }
 	}
-	await this.once(command, listener);
+	await this.once(commandx, listener);
       });
     }).catch((e) => {
       if (debug) log(`Failed to send/receive packet. ${e} Device:${this.mac.toString('hex')} ${x.stack.substring(7)}`);
