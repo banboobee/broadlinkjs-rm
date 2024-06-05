@@ -6,82 +6,82 @@ const assert = require('assert');
 
 // RM Devices (without RF support)
 const rmDeviceTypes = {};
-rmDeviceTypes[parseInt(0x2737, 16)] = "Broadlink RM3 Mini";
-rmDeviceTypes[parseInt(0x6507, 16)] = "Broadlink RM3 Mini";
-rmDeviceTypes[parseInt(0x27c7, 16)] = 'Broadlink RM3 Mini A';
-rmDeviceTypes[parseInt(0x27c2, 16)] = "Broadlink RM3 Mini B";
-rmDeviceTypes[parseInt(0x6508, 16)] = "Broadlink RM3 Mini D";
-rmDeviceTypes[parseInt(0x27de, 16)] = "Broadlink RM3 Mini C";
-rmDeviceTypes[parseInt(0x5f36, 16)] = "Broadlink RM3 Mini B";
-rmDeviceTypes[parseInt(0x27d3, 16)] = "Broadlink RM3 Mini KR";
-rmDeviceTypes[parseInt(0x273d, 16)] = 'Broadlink RM Pro Phicomm';
-rmDeviceTypes[parseInt(0x2712, 16)] = 'Broadlink RM2';
-rmDeviceTypes[parseInt(0x2783, 16)] = 'Broadlink RM2 Home Plus';
-rmDeviceTypes[parseInt(0x277c, 16)] = 'Broadlink RM2 Home Plus GDT';
-rmDeviceTypes[parseInt(0x278f, 16)] = 'Broadlink RM Mini Shate';
-rmDeviceTypes[parseInt(0x2221, 16)] = 'Manual RM Device';
+rmDeviceTypes[0x2737] = "Broadlink RM3 Mini";
+rmDeviceTypes[0x6507] = "Broadlink RM3 Mini";
+rmDeviceTypes[0x27c7] = 'Broadlink RM3 Mini A';
+rmDeviceTypes[0x27c2] = "Broadlink RM3 Mini B";
+rmDeviceTypes[0x6508] = "Broadlink RM3 Mini D";
+rmDeviceTypes[0x27de] = "Broadlink RM3 Mini C";
+rmDeviceTypes[0x5f36] = "Broadlink RM3 Mini B";
+rmDeviceTypes[0x27d3] = "Broadlink RM3 Mini KR";
+rmDeviceTypes[0x273d] = 'Broadlink RM Pro Phicomm';
+rmDeviceTypes[0x2712] = 'Broadlink RM2';
+rmDeviceTypes[0x2783] = 'Broadlink RM2 Home Plus';
+rmDeviceTypes[0x277c] = 'Broadlink RM2 Home Plus GDT';
+rmDeviceTypes[0x278f] = 'Broadlink RM Mini Shate';
+rmDeviceTypes[0x2221] = 'Manual RM Device';
 
 // RM Devices (with RF support)
 const rmPlusDeviceTypes = {};
-rmPlusDeviceTypes[parseInt(0x272a, 16)] = 'Broadlink RM2 Pro Plus';
-rmPlusDeviceTypes[parseInt(0x2787, 16)] = 'Broadlink RM2 Pro Plus v2';
-rmPlusDeviceTypes[parseInt(0x278b, 16)] = 'Broadlink RM2 Pro Plus BL';
-rmPlusDeviceTypes[parseInt(0x2797, 16)] = 'Broadlink RM2 Pro Plus HYC';
-rmPlusDeviceTypes[parseInt(0x27a1, 16)] = 'Broadlink RM2 Pro Plus R1';
-rmPlusDeviceTypes[parseInt(0x27a6, 16)] = 'Broadlink RM2 Pro PP';
-rmPlusDeviceTypes[parseInt(0x279d, 16)] = 'Broadlink RM3 Pro Plus';
-rmPlusDeviceTypes[parseInt(0x27a9, 16)] = 'Broadlink RM3 Pro Plus v2'; // (model RM 3422)
-rmPlusDeviceTypes[parseInt(0x27c3, 16)] = 'Broadlink RM3 Pro';
-rmPlusDeviceTypes[parseInt(0x2223, 16)] = 'Manual RM Pro Device';
+rmPlusDeviceTypes[0x272a] = 'Broadlink RM2 Pro Plus';
+rmPlusDeviceTypes[0x2787] = 'Broadlink RM2 Pro Plus v2';
+rmPlusDeviceTypes[0x278b] = 'Broadlink RM2 Pro Plus BL';
+rmPlusDeviceTypes[0x2797] = 'Broadlink RM2 Pro Plus HYC';
+rmPlusDeviceTypes[0x27a1] = 'Broadlink RM2 Pro Plus R1';
+rmPlusDeviceTypes[0x27a6] = 'Broadlink RM2 Pro PP';
+rmPlusDeviceTypes[0x279d] = 'Broadlink RM3 Pro Plus';
+rmPlusDeviceTypes[0x27a9] = 'Broadlink RM3 Pro Plus v2'; // (model RM 3422)
+rmPlusDeviceTypes[0x27c3] = 'Broadlink RM3 Pro';
+rmPlusDeviceTypes[0x2223] = 'Manual RM Pro Device';
 
 // RM4 Devices (without RF support)
 const rm4DeviceTypes = {};
-rm4DeviceTypes[parseInt(0x51da, 16)] = "Broadlink RM4 Mini";
-rm4DeviceTypes[parseInt(0x610e, 16)] = "Broadlink RM4 Mini";
-rm4DeviceTypes[parseInt(0x62bc, 16)] = "Broadlink RM4 Mini";
-rm4DeviceTypes[parseInt(0x653a, 16)] = "Broadlink RM4 Mini";
-rm4DeviceTypes[parseInt(0x6070, 16)] = "Broadlink RM4 Mini C";
-rm4DeviceTypes[parseInt(0x62be, 16)] = "Broadlink RM4 Mini C";
-rm4DeviceTypes[parseInt(0x610f, 16)] = "Broadlink RM4 Mini C";
-rm4DeviceTypes[parseInt(0x6539, 16)] = "Broadlink RM4 Mini C";
-rm4DeviceTypes[parseInt(0x520d, 16)] = "Broadlink RM4 Mini C";
-rm4DeviceTypes[parseInt(0x648d, 16)] = "Broadlink RM4 Mini S";
-rm4DeviceTypes[parseInt(0x5216, 16)] = "Broadlink RM4 Mini";
-rm4DeviceTypes[parseInt(0x520c, 16)] = "Broadlink RM4 Mini";
-rm4DeviceTypes[parseInt(0x2225, 16)] = 'Manual RM4 Device';
+rm4DeviceTypes[0x51da] = "Broadlink RM4 Mini";
+rm4DeviceTypes[0x610e] = "Broadlink RM4 Mini";
+rm4DeviceTypes[0x62bc] = "Broadlink RM4 Mini";
+rm4DeviceTypes[0x653a] = "Broadlink RM4 Mini";
+rm4DeviceTypes[0x6070] = "Broadlink RM4 Mini C";
+rm4DeviceTypes[0x62be] = "Broadlink RM4 Mini C";
+rm4DeviceTypes[0x610f] = "Broadlink RM4 Mini C";
+rm4DeviceTypes[0x6539] = "Broadlink RM4 Mini C";
+rm4DeviceTypes[0x520d] = "Broadlink RM4 Mini C";
+rm4DeviceTypes[0x648d] = "Broadlink RM4 Mini S";
+rm4DeviceTypes[0x5216] = "Broadlink RM4 Mini";
+rm4DeviceTypes[0x520c] = "Broadlink RM4 Mini";
+rm4DeviceTypes[0x2225] = 'Manual RM4 Device';
 
 // RM4 Devices (with RF support)
 const rm4PlusDeviceTypes = {};
-rm4PlusDeviceTypes[parseInt(0x5213, 16)] = "Broadlink RM4 Pro";
-rm4PlusDeviceTypes[parseInt(0x6026, 16)] = "Broadlink RM4 Pro";
-rm4PlusDeviceTypes[parseInt(0x61a2, 16)] = "Broadlink RM4 Pro";
-rm4PlusDeviceTypes[parseInt(0x649b, 16)] = "Broadlink RM4 Pro";
-rm4PlusDeviceTypes[parseInt(0x653c, 16)] = "Broadlink RM4 Pro";
-rm4PlusDeviceTypes[parseInt(0x520b, 16)] = "Broadlink RM4 Pro";
-rm4PlusDeviceTypes[parseInt(0x6184, 16)] = "Broadlink RM4C Pro";
-rm4PlusDeviceTypes[parseInt(0x2227, 16)] = 'Manual RM4 Pro Device';
+rm4PlusDeviceTypes[0x5213] = "Broadlink RM4 Pro";
+rm4PlusDeviceTypes[0x6026] = "Broadlink RM4 Pro";
+rm4PlusDeviceTypes[0x61a2] = "Broadlink RM4 Pro";
+rm4PlusDeviceTypes[0x649b] = "Broadlink RM4 Pro";
+rm4PlusDeviceTypes[0x653c] = "Broadlink RM4 Pro";
+rm4PlusDeviceTypes[0x520b] = "Broadlink RM4 Pro";
+rm4PlusDeviceTypes[0x6184] = "Broadlink RM4C Pro";
+rm4PlusDeviceTypes[0x2227] = 'Manual RM4 Pro Device';
 
 // Known Unsupported Devices
 const unsupportedDeviceTypes = {};
-unsupportedDeviceTypes[parseInt(0, 16)] = 'Broadlink SP1';
-unsupportedDeviceTypes[parseInt(0x2711, 16)] = 'Broadlink SP2';
-unsupportedDeviceTypes[parseInt(0x2719, 16)] = 'Honeywell SP2';
-unsupportedDeviceTypes[parseInt(0x7919, 16)] = 'Honeywell SP2';
-unsupportedDeviceTypes[parseInt(0x271a, 16)] = 'Honeywell SP2';
-unsupportedDeviceTypes[parseInt(0x791a, 16)] = 'Honeywell SP2';
-unsupportedDeviceTypes[parseInt(0x2733, 16)] = 'OEM Branded SP Mini';
-unsupportedDeviceTypes[parseInt(0x273e, 16)] = 'OEM Branded SP Mini';
-unsupportedDeviceTypes[parseInt(0x2720, 16)] = 'Broadlink SP Mini';
-unsupportedDeviceTypes[parseInt(0x7d07, 16)] = 'Broadlink SP Mini';
-unsupportedDeviceTypes[parseInt(0x753e, 16)] = 'Broadlink SP 3';
-unsupportedDeviceTypes[parseInt(0x2728, 16)] = 'Broadlink SPMini 2';
-unsupportedDeviceTypes[parseInt(0x2736, 16)] = 'Broadlink SPMini Plus';
-unsupportedDeviceTypes[parseInt(0x2714, 16)] = 'Broadlink A1';
-unsupportedDeviceTypes[parseInt(0x4EB5, 16)] = 'Broadlink MP1';
-unsupportedDeviceTypes[parseInt(0x2722, 16)] = 'Broadlink S1 (SmartOne Alarm Kit)';
-unsupportedDeviceTypes[parseInt(0x4E4D, 16)] = 'Dooya DT360E (DOOYA_CURTAIN_V2) or Hysen Heating Controller';
-unsupportedDeviceTypes[parseInt(0x4ead, 16)] = 'Dooya DT360E (DOOYA_CURTAIN_V2) or Hysen Heating Controller';
-unsupportedDeviceTypes[parseInt(0x947a, 16)] = 'BroadLink Outlet';
+unsupportedDeviceTypes[0] = 'Broadlink SP1';
+unsupportedDeviceTypes[0x2711] = 'Broadlink SP2';
+unsupportedDeviceTypes[0x2719] = 'Honeywell SP2';
+unsupportedDeviceTypes[0x7919] = 'Honeywell SP2';
+unsupportedDeviceTypes[0x271a] = 'Honeywell SP2';
+unsupportedDeviceTypes[0x791a] = 'Honeywell SP2';
+unsupportedDeviceTypes[0x2733] = 'OEM Branded SP Mini';
+unsupportedDeviceTypes[0x273e] = 'OEM Branded SP Mini';
+unsupportedDeviceTypes[0x2720] = 'Broadlink SP Mini';
+unsupportedDeviceTypes[0x7d07] = 'Broadlink SP Mini';
+unsupportedDeviceTypes[0x753e] = 'Broadlink SP 3';
+unsupportedDeviceTypes[0x2728] = 'Broadlink SPMini 2';
+unsupportedDeviceTypes[0x2736] = 'Broadlink SPMini Plus';
+unsupportedDeviceTypes[0x2714] = 'Broadlink A1';
+unsupportedDeviceTypes[0x4EB5] = 'Broadlink MP1';
+unsupportedDeviceTypes[0x2722] = 'Broadlink S1 (SmartOne Alarm Kit)';
+unsupportedDeviceTypes[0x4E4D] = 'Dooya DT360E (DOOYA_CURTAIN_V2) or Hysen Heating Controller';
+unsupportedDeviceTypes[0x4ead] = 'Dooya DT360E (DOOYA_CURTAIN_V2) or Hysen Heating Controller';
+unsupportedDeviceTypes[0x947a] = 'BroadLink Outlet';
 
 
 class Broadlink extends EventEmitter {
@@ -234,12 +234,12 @@ class Broadlink extends EventEmitter {
     this.devices[macAddress] = 'Not Supported';
 
     // Ignore devices that don't support infrared or RF.
-    if (unsupportedDeviceTypes[parseInt(deviceType, 16)]) return null;
+    if (unsupportedDeviceTypes[deviceType]) return null;
     if (deviceType >= 0x7530 && deviceType <= 0x7918) return null; // OEM branded SPMini2
 
     // If we don't know anything about the device we ask the user to provide details so that
     // we can handle it correctly.
-    const isKnownDevice = (rmDeviceTypes[parseInt(deviceType, 16)] || rmPlusDeviceTypes[parseInt(deviceType, 16)] || rm4DeviceTypes[parseInt(deviceType, 16)]  || rm4PlusDeviceTypes[parseInt(deviceType, 16)])
+    const isKnownDevice = (rmDeviceTypes[deviceType] || rmPlusDeviceTypes[deviceType] || rm4DeviceTypes[deviceType]  || rm4PlusDeviceTypes[deviceType])
 
     if (!isKnownDevice) {
       log(`\n\x1b[35m[Info]\x1b[0m We've discovered an unknown Broadlink device. This likely won't cause any issues.\n\nPlease raise an issue in the GitHub repository (https://github.com/kiwi-cam/homebridge-broadlink-rm/issues) with details of the type of device and its device type code: "${deviceType.toString(16)}". The device is connected to your network with the IP address "${host.address}".\n`);
@@ -273,10 +273,10 @@ class Device {
     // this.log = console.log;
     this.log = log;
     this.type = deviceType;
-    this.model = rmDeviceTypes[parseInt(deviceType, 16)] || rmPlusDeviceTypes[parseInt(deviceType, 16)] || rm4DeviceTypes[parseInt(deviceType, 16)] || rm4PlusDeviceTypes[parseInt(deviceType, 16)];
+    this.model = rmDeviceTypes[deviceType] || rmPlusDeviceTypes[deviceType] || rm4DeviceTypes[deviceType] || rm4PlusDeviceTypes[deviceType];
 
     //Use different headers for rm4 devices
-    this.rm4Type = (rm4DeviceTypes[parseInt(deviceType, 16)] || rm4PlusDeviceTypes[parseInt(deviceType, 16)])
+    this.rm4Type = (rm4DeviceTypes[deviceType] || rm4PlusDeviceTypes[deviceType])
     this.request_header = this.rm4Type ? new Buffer.from([0x04, 0x00]) : new Buffer.from([]);
     this.code_sending_header = this.rm4Type ? new Buffer.from([0xda, 0x00]) : new Buffer.from([]);
     //except 5f36 and 6508 ¯\_(ツ)_/¯
@@ -298,7 +298,7 @@ class Device {
     this.setupSocket();
 
     // Dynamically add relevant RF methods if the device supports it
-    const isRFSupported = rmPlusDeviceTypes[parseInt(deviceType, 16)] || rm4PlusDeviceTypes[parseInt(deviceType, 16)];
+    const isRFSupported = rmPlusDeviceTypes[deviceType] || rm4PlusDeviceTypes[deviceType];
     if (isRFSupported) {
       this.log(`\x1b[35m[INFO]\x1b[0m Adding RF Support to device ${macAddress.toString('hex')} with type ${deviceType.toString(16)}`);
       this.addRFSupport();
