@@ -361,7 +361,8 @@ class Device {
 	if (this.onPayloadReceivedSync(err, ix, payload)) {
 	  return;
 	} else {
-          this.onPayloadReceived(err, payload);	// conventional methods
+          // this.onPayloadReceived(err, payload);	// conventional methods
+          log(`\x1b[31m[ERROR]\x1b[0m Unhandled Command sequence: ${this.mac.toString('hex')}, ${command}, ${payload.toString('hex')}`);
 	}
       } else if (command == 0x72) {
         log('\x1b[35m[INFO]\x1b[0m Command Acknowledged');
@@ -484,76 +485,78 @@ class Device {
       this.emit(command, err, ix, payload);
       return true;
     }
-    if (err) {
-      return true;
-    } else {
-      return false;
-    }
+    // if (err) {
+    //   return true;
+    // } else {
+    //   return false;
+    // }
+
+    return false;
   }
 
-  onPayloadReceived (err, payload) {
-    const param = payload[0];
-    const { log, debug } = this;
+  // onPayloadReceived (err, payload) {
+  //   const param = payload[0];
+  //   const { log, debug } = this;
 
-    if (debug) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Payload received: ${payload.toString('hex')}`);
+  //   if (debug) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Payload received: ${payload.toString('hex')}`);
 
-    switch (param) {
-      case 0x1: { //RM3 Check temperature
-        const temp = (payload[0x4] * 10 + payload[0x5]) / 10.0;
-        this.emit('temperature', temp);
-        break;
-      }
-      case 0x4: { //get from check_data
-        const data = Buffer.alloc(payload.length - 4, 0);
-        payload.copy(data, 0, 4);
-        this.emit('rawData', data);
-      }
-      case 0x09: { // Check RF Frequency found from RM4 Pro
-        const data = Buffer.alloc(1, 0);
-        payload.copy(data, 0, 0x6);
-        if (data[0] !== 0x1) break;
-        this.emit('rawRFData', data);
-        break;
-      }
-      case 0xa9:
-      case 0xb0: 
-      case 0xb1: 
-      case 0xb2: { //RF Code returned
-        this.emit('rawData', payload);
-        break;
-      }
-      case 0xa: { //RM3 Check temperature and humidity
-        const temp = (payload[0x6] * 100 + payload[0x7]) / 100.0;
-        const humidity = (payload[0x8] * 100 + payload[0x9]) / 100.0;
-        this.emit('temperature',temp, humidity);
-        break;
-      }
-      case 0x1a: { //get from check_data
-        const data = Buffer.alloc(1, 0);
-        payload.copy(data, 0, 0x4);
-        if (data[0] !== 0x1) break;
-        this.emit('rawRFData', data);
-        break;
-      }
-      case 0x1b: { // Check RF Frequency found from RM Pro
-        const data = Buffer.alloc(1, 0);
-        payload.copy(data, 0, 0x4);
-        if (data[0] !== 0x1 && !this.rm4Type) break; //Check if Fequency identified
-        this.emit('rawRFData2', data); 
-        break;
-      }
-      case 0x26: { //get IR code from check_data
-        this.emit('rawData', payload);
-        break;
-      }
-      case 0x5e: { //get data from learning
-        const data = Buffer.alloc(payload.length - 4, 0);
-        payload.copy(data, 0, 6);
-        this.emit('rawData', data);
-        break;
-      }
-    }
-  }
+  //   switch (param) {
+  //     case 0x1: { //RM3 Check temperature
+  //       const temp = (payload[0x4] * 10 + payload[0x5]) / 10.0;
+  //       this.emit('temperature', temp);
+  //       break;
+  //     }
+  //     case 0x4: { //get from check_data
+  //       const data = Buffer.alloc(payload.length - 4, 0);
+  //       payload.copy(data, 0, 4);
+  //       this.emit('rawData', data);
+  //     }
+  //     case 0x09: { // Check RF Frequency found from RM4 Pro
+  //       const data = Buffer.alloc(1, 0);
+  //       payload.copy(data, 0, 0x6);
+  //       if (data[0] !== 0x1) break;
+  //       this.emit('rawRFData', data);
+  //       break;
+  //     }
+  //     case 0xa9:
+  //     case 0xb0: 
+  //     case 0xb1: 
+  //     case 0xb2: { //RF Code returned
+  //       this.emit('rawData', payload);
+  //       break;
+  //     }
+  //     case 0xa: { //RM3 Check temperature and humidity
+  //       const temp = (payload[0x6] * 100 + payload[0x7]) / 100.0;
+  //       const humidity = (payload[0x8] * 100 + payload[0x9]) / 100.0;
+  //       this.emit('temperature',temp, humidity);
+  //       break;
+  //     }
+  //     case 0x1a: { //get from check_data
+  //       const data = Buffer.alloc(1, 0);
+  //       payload.copy(data, 0, 0x4);
+  //       if (data[0] !== 0x1) break;
+  //       this.emit('rawRFData', data);
+  //       break;
+  //     }
+  //     case 0x1b: { // Check RF Frequency found from RM Pro
+  //       const data = Buffer.alloc(1, 0);
+  //       payload.copy(data, 0, 0x4);
+  //       if (data[0] !== 0x1 && !this.rm4Type) break; //Check if Fequency identified
+  //       this.emit('rawRFData2', data); 
+  //       break;
+  //     }
+  //     case 0x26: { //get IR code from check_data
+  //       this.emit('rawData', payload);
+  //       break;
+  //     }
+  //     case 0x5e: { //get data from learning
+  //       const data = Buffer.alloc(payload.length - 4, 0);
+  //       payload.copy(data, 0, 6);
+  //       this.emit('rawData', data);
+  //       break;
+  //     }
+  //   }
+  // }
 
   // Externally Accessed Methods
 
