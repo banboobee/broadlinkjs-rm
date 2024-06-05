@@ -217,7 +217,7 @@ class Broadlink extends EventEmitter {
   addDevice (host, macAddress, deviceType) {
     const { log, debug } = this;
 
-    if (this.devices[macAddress]) return;
+    if (this.devices[macAddress.toString('hex')]) return;
 
     const isHostObjectValid = (
       typeof host === 'object' &&
@@ -231,7 +231,7 @@ class Broadlink extends EventEmitter {
 
     // Mark is at not supported by default so we don't try to
     // create this device again.
-    this.devices[macAddress] = 'Not Supported';
+    this.devices[macAddress.toString('hex')] = 'Not Supported';
 
     // Ignore devices that don't support infrared or RF.
     if (unsupportedDeviceTypes[deviceType]) return null;
@@ -253,7 +253,7 @@ class Broadlink extends EventEmitter {
     device.debug = debug;
     device.actives = new Map();
 
-    this.devices[macAddress] = device;
+    this.devices[macAddress.toString('hex')] = device;
 
     // Authenticate the device and let others know when it's ready.
     device.on('deviceReady', () => {
