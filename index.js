@@ -83,6 +83,7 @@ unsupportedDeviceTypes[0x4E4D] = 'Dooya DT360E (DOOYA_CURTAIN_V2) or Hysen Heati
 unsupportedDeviceTypes[0x4ead] = 'Dooya DT360E (DOOYA_CURTAIN_V2) or Hysen Heating Controller';
 unsupportedDeviceTypes[0x947a] = 'BroadLink Outlet';
 
+const models = {};
 
 class Broadlink extends EventEmitter {
 
@@ -248,7 +249,7 @@ class Broadlink extends EventEmitter {
     }
 
     // The Broadlink device is something we can use.
-    const device = new Device(log, host, macAddress, deviceType)
+    const device = new models[deviceType](log, host, macAddress, deviceType)
     device.log = log;
     device.debug = debug;
     device.actives = new Map();
@@ -276,19 +277,20 @@ class Device {
     this.model = rmDeviceTypes[deviceType] || rmPlusDeviceTypes[deviceType] || rm4DeviceTypes[deviceType] || rm4PlusDeviceTypes[deviceType];
 
     //Use different headers for rm4 devices
-    this.rm4Type = (rm4DeviceTypes[deviceType] || rm4PlusDeviceTypes[deviceType])
-    this.request_header = this.rm4Type ? new Buffer.from([0x04, 0x00]) : new Buffer.from([]);
-    this.code_sending_header = this.rm4Type ? new Buffer.from([0xda, 0x00]) : new Buffer.from([]);
+    // this.rm4Type = (rm4DeviceTypes[deviceType] || rm4PlusDeviceTypes[deviceType])
+    // this.request_header = this.rm4Type ? new Buffer.from([0x04, 0x00]) : new Buffer.from([]);
+    // this.code_sending_header = this.rm4Type ? new Buffer.from([0xda, 0x00]) : new Buffer.from([]);
     //except 5f36 and 6508 ¯\_(ツ)_/¯
-    if (deviceType == 0x5f36 || deviceType == 0x6508) {
-      this.code_sending_header = new Buffer.from([0xd0, 0x00]);
-      this.request_header = new Buffer.from([0x04, 0x00]);
-    }
+    // if (deviceType == 0x5f36 || deviceType == 0x6508) {
+    //   this.code_sending_header = new Buffer.from([0xd0, 0x00]);
+    //   this.request_header = new Buffer.from([0x04, 0x00]);
+    // }
 
     this.on = this.emitter.on;
     this.once = this.emitter.once;
     this.emit = this.emitter.emit;
     this.removeListener = this.emitter.removeListener;
+    this.removeAllListeners = this.emitter.removeAllListeners
 
     this.count = Math.random() & 0xffff;
     this.key = new Buffer.from([0x09, 0x76, 0x28, 0x34, 0x3f, 0xe9, 0x9e, 0x23, 0x76, 0x5c, 0x15, 0x13, 0xac, 0xcf, 0x8b, 0x02]);
@@ -298,11 +300,11 @@ class Device {
     this.setupSocket();
 
     // Dynamically add relevant RF methods if the device supports it
-    const isRFSupported = rmPlusDeviceTypes[deviceType] || rm4PlusDeviceTypes[deviceType];
-    if (isRFSupported) {
-      this.log(`\x1b[35m[INFO]\x1b[0m Adding RF Support to device ${macAddress.toString('hex')} with type ${deviceType.toString(16)}`);
-      this.addRFSupport();
-    }
+    // const isRFSupported = rmPlusDeviceTypes[deviceType] || rm4PlusDeviceTypes[deviceType];
+    // if (isRFSupported) {
+    //   this.log(`\x1b[35m[INFO]\x1b[0m Adding RF Support to device ${macAddress.toString('hex')} with type ${deviceType.toString(16)}`);
+    //   this.addRFSupport();
+    // }
   }
 
   // Create a UDP socket to receive messages from the broadlink device.
@@ -485,78 +487,9 @@ class Device {
       this.emit(command, err, ix, payload);
       return true;
     }
-    // if (err) {
-    //   return true;
-    // } else {
-    //   return false;
-    // }
 
     return false;
   }
-
-  // onPayloadReceived (err, payload) {
-  //   const param = payload[0];
-  //   const { log, debug } = this;
-
-  //   if (debug) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Payload received: ${payload.toString('hex')}`);
-
-  //   switch (param) {
-  //     case 0x1: { //RM3 Check temperature
-  //       const temp = (payload[0x4] * 10 + payload[0x5]) / 10.0;
-  //       this.emit('temperature', temp);
-  //       break;
-  //     }
-  //     case 0x4: { //get from check_data
-  //       const data = Buffer.alloc(payload.length - 4, 0);
-  //       payload.copy(data, 0, 4);
-  //       this.emit('rawData', data);
-  //     }
-  //     case 0x09: { // Check RF Frequency found from RM4 Pro
-  //       const data = Buffer.alloc(1, 0);
-  //       payload.copy(data, 0, 0x6);
-  //       if (data[0] !== 0x1) break;
-  //       this.emit('rawRFData', data);
-  //       break;
-  //     }
-  //     case 0xa9:
-  //     case 0xb0: 
-  //     case 0xb1: 
-  //     case 0xb2: { //RF Code returned
-  //       this.emit('rawData', payload);
-  //       break;
-  //     }
-  //     case 0xa: { //RM3 Check temperature and humidity
-  //       const temp = (payload[0x6] * 100 + payload[0x7]) / 100.0;
-  //       const humidity = (payload[0x8] * 100 + payload[0x9]) / 100.0;
-  //       this.emit('temperature',temp, humidity);
-  //       break;
-  //     }
-  //     case 0x1a: { //get from check_data
-  //       const data = Buffer.alloc(1, 0);
-  //       payload.copy(data, 0, 0x4);
-  //       if (data[0] !== 0x1) break;
-  //       this.emit('rawRFData', data);
-  //       break;
-  //     }
-  //     case 0x1b: { // Check RF Frequency found from RM Pro
-  //       const data = Buffer.alloc(1, 0);
-  //       payload.copy(data, 0, 0x4);
-  //       if (data[0] !== 0x1 && !this.rm4Type) break; //Check if Fequency identified
-  //       this.emit('rawRFData2', data); 
-  //       break;
-  //     }
-  //     case 0x26: { //get IR code from check_data
-  //       this.emit('rawData', payload);
-  //       break;
-  //     }
-  //     case 0x5e: { //get data from learning
-  //       const data = Buffer.alloc(payload.length - 4, 0);
-  //       payload.copy(data, 0, 6);
-  //       this.emit('rawData', data);
-  //       break;
-  //     }
-  //   }
-  // }
 
   // Externally Accessed Methods
 
@@ -572,15 +505,13 @@ class Device {
 	  return reject(`${senderr}`);	// sendPacket error
 	}
 	const timeout = setTimeout(() => {
-	  this.removeListener(commandx, listener);
+	  // this.removeListener(commandx, listener);
+	  this.removeAllListeners(commandx);
 	  this.actives.delete(ix0);
-	  return reject(`Timed out of 10 second(s) in response to ${command}. source:${ix0}`);
-	}, 10*1000);
+	  return reject(`Timed out of 5 second(s) in response to ${command}. source:${ix0}`);
+	}, 5*1000);
 	const listener = (status, ix, payload) => {
 	  clearTimeout(timeout);
-	  // if (ix0 !== ix) {
-	  //   return reject(`Unexpected command sequence of ${command}. source:${ix0} response:${ix}`);
-	  // }
 	  if (status) {
 	    if (debug) log(`\x1b[33m[DEBUG]\x1b[0m Error response of ${command}. source:${ix0} Device:${this.mac.toString('hex')} listener:${this.emitter.listenerCount(command)}`);
 	    resolve(null);
@@ -596,128 +527,358 @@ class Device {
     })
   }
   
-  async checkData(debug = false) {
-    let packet = new Buffer.from([0x04, 0x00, 0x00, 0x00]);
-    packet = Buffer.concat([this.request_header, packet]);
-    const payload = await this.sendPacketSync('checkData', packet, debug)
+  // async checkData(debug = false) {
+  //   let packet = new Buffer.from([0x04, 0x00, 0x00, 0x00]);
+  //   packet = Buffer.concat([this.request_header, packet]);
+  //   const payload = await this.sendPacketSync('checkData', packet, debug)
+  //   if (payload) {
+  //     const byte0 = 4 + this.request_header.length;
+  //     const data = Buffer.alloc(payload.length - byte0, 0);
+  //     payload.copy(data, 0, byte0);
+  //     this.emit('rawData', data);
+  //     return data;
+  //   }
+  //   return null;
+  // }
+
+  // async sendData (data, debug = false) {
+  //   let packet = new Buffer.from([0x02, 0x00, 0x00, 0x00]);
+  //   let header = Buffer.alloc(this.request_header.length);
+  //   this.request_header.copy(header); 
+  //   if (this.request_header.length) header.writeUint16LE(4 + data.length);
+  //   packet = Buffer.concat([header, packet, data]);
+  //   // this.log(`Device:${this.mac.toString('hex')} ${packet.toString('hex')}`);
+  //   await this.sendPacketSync('sendData', packet, debug)
+  // }
+
+  // async enterLearning(debug = false) {
+  //   let packet = new Buffer.from([0x03, 0x00, 0x00, 0x00]);
+  //   packet = Buffer.concat([this.request_header, packet]);
+  //   await this.sendPacketSync('enterLearning', packet, debug)
+  // }
+
+  // async checkTemperature(debug = false) {
+  //   if (this.request_header.length) {
+  //     let packet = new Buffer.from([0x24, 0x00, 0x00, 0x00]);
+  //     packet = Buffer.concat([this.request_header, packet]);
+  //     const payload = await this.sendPacketSync('checkSensors', packet, debug)
+  //     if (payload) {
+  //       const temp = (payload[0x6] * 10 + payload[0x7]) / 10.0;
+  //       const humidity = (payload[0x8] * 100 + payload[0x9]) / 100.0;
+  // 	// this.log(`Device:${this.mac.toString('hex')} ${payload.toString('hex')}, temp:${temp}, humidity:${humidity}`);
+  //       this.emit('temperature',temp, humidity);
+  // 	return {
+  //         "temperature": temp,
+  //         "humidity": humidity
+  // 	}
+  //     }
+  //     return undefined;
+  //   } else {
+  //     let packet = new Buffer.from([0x1, 0x00, 0x00, 0x00]);
+  //     packet = Buffer.concat([this.request_header, packet]);
+  //     const payload = await this.sendPacketSync('checkTemperature', packet, debug)
+  //     if (payload) {
+  //       const temp = (payload[0x4] * 10 + payload[0x5]) / 10.0;
+  // 	// this.log(`Device:${this.mac.toString('hex')} Temperature:${temp}`);
+  //       this.emit('temperature', temp);
+  // 	return temp;
+  //     }
+  //     return undefined;
+  //   }
+  // }
+  // checkSensors = this.checkTemperature;
+  // checkHumidity = this.checkTemperature;
+
+  // async cancelLearn(debug = false) {
+  //   let packet = new Buffer.from([0x1e, 0x00, 0x00, 0x00]);
+  //   packet = Buffer.concat([this.request_header, packet]);
+  //   await this.sendPacketSync('cancelLearning', packet, debug);
+  // }
+  // cancelLearning = this.cancelLearn;
+  // cancelSweepFrequency = this.cancelLearn;
+  
+  // addRFSupport() {
+  //   this.enterRFSweep = async (debug = false) => {
+  //     let packet = new Buffer.from([0x19, 0x00, 0x00, 0x00]);
+  //     packet = Buffer.concat([this.request_header, packet]);
+  //     await this.sendPacketSync('enterRFSweep', packet, debug);
+  //   }
+  //   this.sweepFrequency = this.enterRFSweep;
+
+  //   this.checkRFData = async (debug = false) => {
+  //     let packet = new Buffer.from([0x1a, 0x00, 0x00, 0x00]);
+  //     packet = Buffer.concat([this.request_header, packet]);
+  //     const payload = await this.sendPacketSync('checkFrequency', packet, debug);
+  //     if (payload) {
+  // 	const byte0 = 4 + this.request_header.length;
+  // 	// this.log(`Device:${this.mac.toString('hex')} ${payload.toString('hex')} ${payload.readUint32LE(byte0 + 1)/1000}MHz`);
+  //       const data = Buffer.alloc(5, 0);
+  //       payload.copy(data, 0, byte0);
+  //       if (payload[byte0]) {
+  // 	  this.emit('rawRFData', data);
+  // 	}
+  // 	return {
+  // 	  locked: payload[byte0],
+  // 	  frequency: payload.readUint32LE(byte0 + 1)/1000
+  // 	}
+  //     }
+  //     return null;
+  //   }
+  //   this.checkFrequency = this.checkRFData;
+
+  //   this.checkRFData2 = async (frequency, debug = false) => {
+  //     let packet = new Buffer.from([0x1b, 0x00, 0x00, 0x00]);
+  //     let header = Buffer.alloc(this.request_header.length);
+  //     this.request_header.copy(header); 
+  //     // packet = Buffer.concat([this.request_header, packet]);
+  //     if (frequency) {
+  // 	const data = Buffer.alloc(4, 0);
+  // 	data.writeUint32LE(Math.round(frequency * 1000));
+  // 	packet = Buffer.concat([packet, data]);
+  // 	if (this.request_header.length) header.writeUint16LE(8);
+  //     }
+  //     packet = Buffer.concat([header, packet]);
+  //     const payload = await this.sendPacketSync('checkRFData', packet, debug);
+  //     if (payload) {
+  // 	const byte0 = 4 + this.request_header.length;
+  // 	// this.log(`Device:${this.mac.toString('hex')} ${payload.toString('hex')}`);
+  //       const data = Buffer.alloc(1, 0);
+  //       payload.copy(data, 0, byte0);
+  //       this.emit('rawRFData2', data);
+  //     }
+  //   }
+  //   this.findRFPacket = this.checkRFData2;
+  // }
+
+  _sendRM = async (command, data, debug) => {
+    const payload = await this.sendPacketSync(command,data, debug);
+    return payload ? payload.subarray(4) : null;
+  }
+
+  _sendRM4 = async (command, data, debug) => {
+    const header = Buffer.alloc(2, 0);
+    header.writeUint16LE(data.length);
+    const packet = Buffer.concat([header, data]);
+    const payload = await this.sendPacketSync(command, packet, debug);
     if (payload) {
-      const byte0 = 4 + this.request_header.length;
-      const data = Buffer.alloc(payload.length - byte0, 0);
-      payload.copy(data, 0, byte0);
-      this.emit('rawData', data);
-      return data;
+      const l = payload.readUint16LE(0);
+      return payload.subarray(6, l + 2);
     }
     return null;
   }
+}
 
-  async sendData (data, debug = false) {
+class rmmini extends Device {
+  constructor(log, host, macAddress, deviceType) {
+    super(log, host, macAddress, deviceType);
+  }
+
+  _send = this._sendRM;
+
+  sendData = async (data, debug = false) => {
     let packet = new Buffer.from([0x02, 0x00, 0x00, 0x00]);
-    let header = Buffer.alloc(this.request_header.length);
-    this.request_header.copy(header); 
-    if (this.request_header.length) header.writeUint16LE(4 + data.length);
-    packet = Buffer.concat([header, packet, data]);
-    // this.log(`Device:${this.mac.toString('hex')} ${packet.toString('hex')}`);
-    await this.sendPacketSync('sendData', packet, debug)
+    packet = Buffer.concat([packet, data]);
+    await this._send('sendData', packet, debug);
   }
 
-  async enterLearning(debug = false) {
-    let packet = new Buffer.from([0x03, 0x00, 0x00, 0x00]);
-    packet = Buffer.concat([this.request_header, packet]);
-    await this.sendPacketSync('enterLearning', packet, debug)
+  enterLearning = async (debug = false) => {
+    const packet = new Buffer.from([0x03, 0x00, 0x00, 0x00]);
+    await this._send('enterLearning', packet, debug);
   }
 
-  async checkTemperature(debug = false) {
-    if (this.request_header.length) {
-      let packet = new Buffer.from([0x24, 0x00, 0x00, 0x00]);
-      packet = Buffer.concat([this.request_header, packet]);
-      const payload = await this.sendPacketSync('checkSensors', packet, debug)
-      if (payload) {
-        const temp = (payload[0x6] * 10 + payload[0x7]) / 10.0;
-        const humidity = (payload[0x8] * 100 + payload[0x9]) / 100.0;
-	// this.log(`Device:${this.mac.toString('hex')} ${payload.toString('hex')}, temp:${temp}, humidity:${humidity}`);
-        this.emit('temperature',temp, humidity);
-	return {
-          "temperature": temp,
-          "humidity": humidity
-	}
-      }
-      return undefined;
-    } else {
-      let packet = new Buffer.from([0x1, 0x00, 0x00, 0x00]);
-      packet = Buffer.concat([this.request_header, packet]);
-      const payload = await this.sendPacketSync('checkTemperature', packet, debug)
-      if (payload) {
-        const temp = (payload[0x4] * 10 + payload[0x5]) / 10.0;
-	// this.log(`Device:${this.mac.toString('hex')} Temperature:${temp}`);
-        this.emit('temperature', temp);
-	return temp;
-      }
-      return undefined;
+  cancelLearn = async (debug = false) => {
+    const packet = new Buffer.from([0x1e, 0x00, 0x00, 0x00]);
+    await this._send('cancelLearning', packet, debug);
+  }
+  cancelLearning = this.cancelLearn;
+  
+  checkData = async (debug = false) => {
+    const packet = new Buffer.from([0x04, 0x00, 0x00, 0x00]);
+    const payload = await this._send('checkData', packet, debug)
+    // if (payload) {
+    //   const data = Buffer.alloc(payload.length, 0);
+    //   payload.copy(data);
+    //   this.emit('rawData', data);
+    //   return data;
+    // }
+    if (payload) {
+      this.emit('rawData', payload);
+      return payload;
     }
+    return null;
+  }
+}
+
+class rmpro extends rmmini {
+  constructor(log, host, macAddress, deviceType) {
+    super(log, host, macAddress, deviceType);
+    
+    this.log(`\x1b[35m[INFO]\x1b[0m Adding RF Support to device ${macAddress.toString('hex')} with type ${deviceType.toString(16)}`);
+  }
+
+  _send = this._sendRM;
+
+  checkTemperature = async (debug = false) => {
+    const packet = new Buffer.from([0x1, 0x00, 0x00, 0x00]);
+    const payload = await this._send('checkTemperature', packet, debug)
+    if (payload) {
+      const temp = (payload[0x0] * 10 + payload[0x1]) / 10.0;
+      this.emit('temperature', temp);
+      return temp;
+    }
+    return undefined;
   }
   checkSensors = this.checkTemperature;
   checkHumidity = this.checkTemperature;
-
-  async cancelLearn(debug = false) {
-    let packet = new Buffer.from([0x1e, 0x00, 0x00, 0x00]);
-    packet = Buffer.concat([this.request_header, packet]);
-    await this.sendPacketSync('cancelLearning', packet, debug);
-  }
-  cancelLearning = this.cancelLearn;
-  cancelSweepFrequency = this.cancelLearn;
   
-  addRFSupport() {
-    this.enterRFSweep = async (debug = false) => {
-      let packet = new Buffer.from([0x19, 0x00, 0x00, 0x00]);
-      packet = Buffer.concat([this.request_header, packet]);
-      await this.sendPacketSync('enterRFSweep', packet, debug);
-    }
-    this.sweepFrequency = this.enterRFSweep;
-
-    this.checkRFData = async (debug = false) => {
-      let packet = new Buffer.from([0x1a, 0x00, 0x00, 0x00]);
-      packet = Buffer.concat([this.request_header, packet]);
-      const payload = await this.sendPacketSync('checkFrequency', packet, debug);
-      if (payload) {
-	const byte0 = 4 + this.request_header.length;
-	// this.log(`Device:${this.mac.toString('hex')} ${payload.toString('hex')} ${payload.readUint32LE(byte0 + 1)/1000}MHz`);
-        const data = Buffer.alloc(5, 0);
-        payload.copy(data, 0, byte0);
-        if (payload[byte0]) {
-	  this.emit('rawRFData', data);
-	}
-	return {
-	  locked: payload[byte0],
-	  frequency: payload.readUint32LE(byte0 + 1)/1000
-	}
-      }
-      return null;
-    }
-    this.checkFrequency = this.checkRFData;
-
-    this.checkRFData2 = async (frequency, debug = false) => {
-      let packet = new Buffer.from([0x1b, 0x00, 0x00, 0x00]);
-      let header = Buffer.alloc(this.request_header.length);
-      this.request_header.copy(header); 
-      // packet = Buffer.concat([this.request_header, packet]);
-      if (frequency) {
-	const data = Buffer.alloc(4, 0);
-	data.writeUint32LE(Math.round(frequency * 1000));
-	packet = Buffer.concat([packet, data]);
-	if (this.request_header.length) header.writeUint16LE(8);
-      }
-      packet = Buffer.concat([header, packet]);
-      const payload = await this.sendPacketSync('checkRFData', packet, debug);
-      if (payload) {
-	const byte0 = 4 + this.request_header.length;
-	// this.log(`Device:${this.mac.toString('hex')} ${payload.toString('hex')}`);
-        const data = Buffer.alloc(1, 0);
-        payload.copy(data, 0, byte0);
-        this.emit('rawRFData2', data);
-      }
-    }
-    this.findRFPacket = this.checkRFData2;
+  enterRFSweep = async (debug = false) => {
+    const packet = new Buffer.from([0x19, 0x00, 0x00, 0x00]);
+    await this._send('enterRFSweep', packet, debug);
   }
+  sweepFrequency = this.enterRFSweep;
+
+  checkRFData = async (debug = false) => {
+    const packet = new Buffer.from([0x1a, 0x00, 0x00, 0x00]);
+    const payload = await this._send('checkFrequency', packet, debug);
+    if (payload) {
+      // const data = Buffer.alloc(5, 0);
+      // payload.copy(data, 0);
+      // if (payload[0]) {
+      // 	this.emit('rawRFData', data);
+      // }
+      if (payload[0]) {
+	this.emit('rawRFData', payload);
+      }
+      return {
+	locked: payload[0],
+	frequency: payload.readUint32LE(1)/1000
+      }
+    }
+    return null;
+  }
+  checkFrequency = this.checkRFData;
+
+  checkRFData2 = async (frequency, debug = false) => {
+    let packet = new Buffer.from([0x1b, 0x00, 0x00, 0x00]);
+    if (frequency) {
+      const data = Buffer.alloc(4, 0);
+      data.writeUint32LE(Math.round(frequency * 1000));
+      packet = Buffer.concat([packet, data]);
+    }
+    const payload = await this._send('checkRFData2', packet, debug);
+    // if (payload) {
+    //   const data = Buffer.alloc(1, 0);
+    //   payload.copy(data);
+    //   this.emit('rawRFData2', data);
+    // }
+    if (payload) {
+      this.emit('rawRFData2', payload);
+    }
+  }
+  findRFPacket = this.checkRFData2;
 }
+
+class rm4mini extends rmmini {
+  constructor(log, host, macAddress, deviceType) {
+    super(log, host, macAddress, deviceType);
+  }
+
+  _send = this._sendRM4;
+
+  checkTemperature = async (debug = false) => {
+    const packet = new Buffer.from([0x24, 0x00, 0x00, 0x00]);
+    const payload = await this._send('checkSensors', packet, debug)
+    if (payload) {
+      const temp = (payload[0x0] * 10 + payload[0x1]) / 10.0;
+      const humidity = (payload[0x2] * 100 + payload[0x3]) / 100.0;
+      this.emit('temperature',temp, humidity);
+      return {
+        "temperature": temp,
+        "humidity": humidity
+      }
+    }
+    return undefined;
+  }
+  checkSensors = this.checkTemperature;
+  checkHumidity = this.checkTemperature;
+}
+
+class rm4pro extends rmpro {
+  constructor(log, host, macAddress, deviceType) {
+    super(log, host, macAddress, deviceType);
+  }
+
+  _send = this._sendRM4;
+
+  checkTemperature = async (debug = false) => {
+    const packet = new Buffer.from([0x24, 0x00, 0x00, 0x00]);
+    const payload = await this._send('checkSensors', packet, debug)
+    if (payload) {
+      const temp = (payload[0x0] * 10 + payload[0x1]) / 10.0;
+      const humidity = (payload[0x2] * 100 + payload[0x3]) / 100.0;
+      this.emit('temperature',temp, humidity);
+      return {
+        "temperature": temp,
+        "humidity": humidity
+      }
+    }
+    return undefined;
+  }
+
+  cancelSweepFrequency = this.cancelLearn;
+}
+
+// RM Devices (without RF support)
+models[0x2737] = rmmini;
+models[0x6507] = rmmini;
+models[0x27c7] = rmmini;
+models[0x27c2] = rmmini;
+models[0x6508] = rm4mini;
+models[0x27de] = rmmini;
+models[0x5f36] = rm4mini;
+models[0x27d3] = rmmini;
+models[0x273d] = rmmini;
+models[0x2712] = rmmini;
+models[0x2783] = rmmini;
+models[0x277c] = rmmini;
+models[0x278f] = rmmini;
+models[0x2221] = rmmini;
+
+// RM Devices (with RF support)
+models[0x272a] = rmpro;
+models[0x2787] = rmpro;
+models[0x278b] = rmpro;
+models[0x2797] = rmpro;
+models[0x27a1] = rmpro;
+models[0x27a6] = rmpro;
+models[0x279d] = rmpro;
+models[0x27a9] = rmpro;
+models[0x27c3] = rmpro;
+models[0x2223] = rmpro;
+
+// RM4 Devices (without RF support)
+models[0x51da] = rm4mini;
+models[0x610e] = rm4mini;
+models[0x62bc] = rm4mini;
+models[0x653a] = rm4mini;
+models[0x6070] = rm4mini;
+models[0x62be] = rm4mini;
+models[0x610f] = rm4mini;
+models[0x6539] = rm4mini;
+models[0x520d] = rm4mini;
+models[0x648d] = rm4mini;
+models[0x5216] = rm4mini;
+models[0x520c] = rm4mini;
+models[0x2225] = rm4mini;
+
+// RM4 Devices (with RF support)
+models[0x5213] = rm4pro;
+models[0x6026] = rm4pro;
+models[0x61a2] = rm4pro;
+models[0x649b] = rm4pro;
+models[0x653c] = rm4pro;
+models[0x520b] = rm4pro;
+models[0x6184] = rm4pro;
+models[0x2227] = rm4pro;
 
 module.exports = Broadlink;
