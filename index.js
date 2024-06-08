@@ -240,7 +240,8 @@ class Broadlink extends EventEmitter {
 
     // If we don't know anything about the device we ask the user to provide details so that
     // we can handle it correctly.
-    const isKnownDevice = (rmDeviceTypes[deviceType] || rmPlusDeviceTypes[deviceType] || rm4DeviceTypes[deviceType]  || rm4PlusDeviceTypes[deviceType])
+    // const isKnownDevice = (rmDeviceTypes[deviceType] || rmPlusDeviceTypes[deviceType] || rm4DeviceTypes[deviceType]  || rm4PlusDeviceTypes[deviceType])
+    const isKnownDevice = models[deviceType];
 
     if (!isKnownDevice) {
       log(`\n\x1b[35m[Info]\x1b[0m We've discovered an unknown Broadlink device. This likely won't cause any issues.\n\nPlease raise an issue in the GitHub repository (https://github.com/kiwi-cam/homebridge-broadlink-rm/issues) with details of the type of device and its device type code: "${deviceType.toString(16)}". The device is connected to your network with the IP address "${host.address}".\n`);
@@ -249,7 +250,7 @@ class Broadlink extends EventEmitter {
     }
 
     // The Broadlink device is something we can use.
-    const device = new models[deviceType](log, host, macAddress, deviceType)
+    const device = new models[deviceType].class(log, host, macAddress, deviceType)
     device.log = log;
     device.debug = debug;
     device.actives = new Map();
@@ -274,7 +275,8 @@ class Device {
     // this.log = console.log;
     this.log = log;
     this.type = deviceType;
-    this.model = rmDeviceTypes[deviceType] || rmPlusDeviceTypes[deviceType] || rm4DeviceTypes[deviceType] || rm4PlusDeviceTypes[deviceType];
+    // this.model = rmDeviceTypes[deviceType] || rmPlusDeviceTypes[deviceType] || rm4DeviceTypes[deviceType] || rm4PlusDeviceTypes[deviceType];
+    this.model = models[deviceType].model;
 
     //Use different headers for rm4 devices
     // this.rm4Type = (rm4DeviceTypes[deviceType] || rm4PlusDeviceTypes[deviceType])
@@ -828,57 +830,31 @@ class rm4pro extends rmpro {
   cancelSweepFrequency = this.cancelLearn;
 }
 
-// RM Devices (without RF support)
-models[0x2737] = rmmini;
-models[0x6507] = rmmini;
-models[0x27c7] = rmmini;
-models[0x27c2] = rmmini;
-models[0x6508] = rm4mini;
-models[0x27de] = rmmini;
-models[0x5f36] = rm4mini;
-models[0x27d3] = rmmini;
-models[0x273d] = rmmini;
-models[0x2712] = rmmini;
-models[0x2783] = rmmini;
-models[0x277c] = rmmini;
-models[0x278f] = rmmini;
-models[0x2221] = rmmini;
-
-// RM Devices (with RF support)
-models[0x272a] = rmpro;
-models[0x2787] = rmpro;
-models[0x278b] = rmpro;
-models[0x2797] = rmpro;
-models[0x27a1] = rmpro;
-models[0x27a6] = rmpro;
-models[0x279d] = rmpro;
-models[0x27a9] = rmpro;
-models[0x27c3] = rmpro;
-models[0x2223] = rmpro;
-
-// RM4 Devices (without RF support)
-models[0x51da] = rm4mini;
-models[0x610e] = rm4mini;
-models[0x62bc] = rm4mini;
-models[0x653a] = rm4mini;
-models[0x6070] = rm4mini;
-models[0x62be] = rm4mini;
-models[0x610f] = rm4mini;
-models[0x6539] = rm4mini;
-models[0x520d] = rm4mini;
-models[0x648d] = rm4mini;
-models[0x5216] = rm4mini;
-models[0x520c] = rm4mini;
-models[0x2225] = rm4mini;
-
-// RM4 Devices (with RF support)
-models[0x5213] = rm4pro;
-models[0x6026] = rm4pro;
-models[0x61a2] = rm4pro;
-models[0x649b] = rm4pro;
-models[0x653c] = rm4pro;
-models[0x520b] = rm4pro;
-models[0x6184] = rm4pro;
-models[0x2227] = rm4pro;
+Object.keys(rmDeviceTypes).forEach((x) => {
+  models[x] = {
+    model: rmDeviceTypes[x],
+    class: rmmini
+  }
+})
+Object.keys(rmPlusDeviceTypes).forEach((x) => {
+  models[x] = {
+    model: rmPlusDeviceTypes[x],
+    class: rmpro
+  }
+})
+Object.keys(rm4DeviceTypes).forEach((x) => {
+  models[x] = {
+    model: rm4DeviceTypes[x],
+    class: rm4mini
+  }
+})
+Object.keys(rm4PlusDeviceTypes).forEach((x) => {
+  models[x] = {
+    model: rm4PlusDeviceTypes[x],
+    class: rm4pro
+  }
+})
+models[0x5f36].class = rm4mini;
+models[0x6508].class = rm4mini;
 
 module.exports = Broadlink;
