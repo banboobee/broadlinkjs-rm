@@ -3,6 +3,7 @@ const dgram = require('dgram');
 const os = require('os');
 const crypto = require('crypto');
 const assert = require('assert');
+const Mutex = require('await-semaphore').Mutex;
 
 // RM Devices (without RF support)
 const rmDeviceTypes = {};
@@ -277,6 +278,7 @@ class Device {
     this.type = deviceType;
     // this.model = rmDeviceTypes[deviceType] || rmPlusDeviceTypes[deviceType] || rm4DeviceTypes[deviceType] || rm4PlusDeviceTypes[deviceType];
     this.model = models[deviceType].model;
+    this.que = new Mutex();
 
     //Use different headers for rm4 devices
     // this.rm4Type = (rm4DeviceTypes[deviceType] || rm4PlusDeviceTypes[deviceType])
@@ -409,7 +411,7 @@ class Device {
     this.sendPacket(0x65, payload);
   }
 
-  sendPacket (command, payload, debug = false, callback = null) {
+  async sendPacket (command, payload, debug = false, callback = null) {
     const { log, socket } = this;
     //debug = this.debug;
     this.count = (this.count + 1) & 0xffff;
@@ -496,36 +498,39 @@ class Device {
   // Externally Accessed Methods
 
   async sendPacketSync(command, packet, debug = false) {
-    const { log } = this;
-    const x = new Error('Trace:');
-    return await new Promise((resolve, reject) => {
-      this.sendPacket(0x6a, packet, debug, async (senderr, ix0) => {
-	const commandx = `${command}${ix0}`;
-	this.actives.set(ix0, commandx);
-	// log(this.actives);
-	if (senderr) {
-	  return reject(`${senderr}`);	// sendPacket error
-	}
-	const timeout = setTimeout(() => {
-	  // this.removeListener(commandx, listener);
-	  this.removeAllListeners(commandx);
-	  this.actives.delete(ix0);
-	  return reject(`Timed out of 5 second(s) in response to ${command}. source:${ix0}`);
-	}, 5*1000);
-	const listener = (status, ix, payload) => {
-	  clearTimeout(timeout);
-	  if (status) {
-	    if (debug) log(`\x1b[33m[DEBUG]\x1b[0m Error response of ${command}. source:${ix0} Device:${this.mac.toString('hex')} listener:${this.emitter.listenerCount(command)}`);
-	    resolve(null);
-	  } else {
-	    if (debug) log(`\x1b[33m[DEBUG]\x1b[0m Succeed response of ${command}. source:${ix0} Device:${this.mac.toString('hex')} listener:${this.emitter.listenerCount(command)}`);
-	    resolve(payload);
+    return await this.que.use(async () => {
+      const { log } = this;
+      // const x = new Error('Trace:');
+      return await new Promise((resolve, reject) => {
+	this.sendPacket(0x6a, packet, debug, async (senderr, ix0) => {
+	  const commandx = `${command}${ix0}`;
+	  this.actives.set(ix0, commandx);
+	  // log(this.actives);
+	  if (senderr) {
+	    return reject(`${senderr}`);	// sendPacket error
 	  }
-	}
-	await this.once(commandx, listener);
-      });
-    }).catch((e) => {
-      if (debug) log(`Failed to send/receive packet. ${e} Device:${this.mac.toString('hex')} ${x.stack.substring(7)}`);
+	  const timeout = setTimeout(() => {
+	    // this.removeListener(commandx, listener);
+	    this.removeAllListeners(commandx);
+	    this.actives.delete(ix0);
+	    return reject(`Timed out of 5 second(s) in response to ${command}. source:${ix0}`);
+	  }, 5*1000);
+	  const listener = (status, ix, payload) => {
+	    clearTimeout(timeout);
+	    if (status) {
+	      if (debug) log(`\x1b[33m[DEBUG]\x1b[0m Error response of ${command}. source:${ix0} Device:${this.mac.toString('hex')}`);
+	      resolve(null);
+	    } else {
+	      if (debug) log(`\x1b[33m[DEBUG]\x1b[0m Succeed response of ${command}. source:${ix0} Device:${this.mac.toString('hex')}`);
+	      resolve(payload);
+	    }
+	  }
+	  await this.once(commandx, listener);
+	});
+      }).catch((e) => {
+	// if (debug) log(`\x1b[31m[ERROR]\x1b[0m Failed to send/receive packet. ${e} Device:${this.mac.toString('hex')} ${x.stack.substring(7)}`);
+	if (debug) log(`\x1b[31m[ERROR]\x1b[0m Failed to send/receive packet. ${e} Device:${this.mac.toString('hex')}`);
+      })
     })
   }
   
@@ -651,6 +656,20 @@ class Device {
   //   }
   //   this.findRFPacket = this.checkRFData2;
   // }
+
+  ping = async (debug = false) => {await this.que.use(async () => {
+    const packet = Buffer.alloc(0x30, 0);
+    packet[0x26] = 0x1;
+    if (debug) this.log('\x1b[33m[DEBUG]\x1b[0m Sending keepalive to', this.host.address,':',this.host.port);
+    this.socket.send(packet, 0, packet.length, this.host.port, this.host.address, (err) => {
+      if (err) {log('\x1b[33m[DEBUG]\x1b[0m send keepalive packet error', err)}
+    })
+  })}
+
+  pauseWhile = async (callback, debug = false) => {await this.que.use(async () => {
+    if (debug) this.log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Pausing device while the requested operation.`);
+    callback();
+  })}
 
   _sendRM = async (command, data, debug) => {
     const payload = await this.sendPacketSync(command,data, debug);
