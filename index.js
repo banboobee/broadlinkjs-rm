@@ -502,6 +502,7 @@ class Device {
       const { log } = this;
       // const x = new Error('Trace:');
       return await new Promise((resolve, reject) => {
+	const time0 = new Date();
 	this.sendPacket(0x6a, packet, debug, async (senderr, ix0) => {
 	  const commandx = `${command}${ix0}`;
 	  this.actives.set(ix0, commandx);
@@ -516,12 +517,13 @@ class Device {
 	    return reject(`Timed out of 5 second(s) in response to ${command}. source:${ix0}`);
 	  }, 5*1000);
 	  const listener = (status, ix, payload) => {
+	    const dt = (new Date() - time0) / 1000;
 	    clearTimeout(timeout);
 	    if (status) {
-	      if (debug) log(`\x1b[33m[DEBUG]\x1b[0m Error response of ${command}. source:${ix0} Device:${this.mac.toString('hex')}`);
+	      if (debug) log(`\x1b[33m[DEBUG]\x1b[0m Error response of ${command} in ${dt.toFixed(2)} sec. source:${ix0} device:${this.mac.toString('hex')}}`);
 	      resolve(null);
 	    } else {
-	      if (debug) log(`\x1b[33m[DEBUG]\x1b[0m Succeed response of ${command}. source:${ix0} Device:${this.mac.toString('hex')}`);
+	      if (debug) log(`\x1b[33m[DEBUG]\x1b[0m Succeed response of ${command} in ${dt.toFixed(2)} sec. source:${ix0} device:${this.mac.toString('hex')}.`);
 	      resolve(payload);
 	    }
 	  }
@@ -743,9 +745,9 @@ class rmpro extends rmmini {
     const packet = new Buffer.from([0x1, 0x00, 0x00, 0x00]);
     const payload = await this._send('checkTemperature', packet, debug)
     if (payload) {
-      const temp = (payload[0x0] * 10 + payload[0x1]) / 10.0;
-      this.emit('temperature', temp);
-      return temp;
+      const temperture = payload[0x0] + payload[0x1] / 10.0;
+      this.emit('temperature', temperture);
+      return temperture;
     }
     return undefined;
   }
@@ -806,22 +808,26 @@ class rm4mini extends rmmini {
 
   _send = this._sendRM4;
 
-  checkTemperature = async (debug = false) => {
+  checkSensors = async (debug = false) => {
     const packet = new Buffer.from([0x24, 0x00, 0x00, 0x00]);
     const payload = await this._send('checkSensors', packet, debug)
     if (payload) {
-      const temp = (payload[0x0] * 10 + payload[0x1]) / 10.0;
-      const humidity = (payload[0x2] * 100 + payload[0x3]) / 100.0;
-      this.emit('temperature',temp, humidity);
+      const temperature = payload[0x0] + payload[0x1] / 100.0;
+      const humidity = payload[0x2] + payload[0x3] / 100.0;
+      this.emit('temperature',temperature, humidity);
       return {
-        "temperature": temp,
+        "temperature": temperture,
         "humidity": humidity
       }
     }
     return undefined;
   }
-  checkSensors = this.checkTemperature;
-  checkHumidity = this.checkTemperature;
+  checkTemperature = async (debug = false) => {
+    this.checkSensors()?.[temperature];
+  }
+  checkHumidity =  async (debug = false) => {
+    this.checkSensors()?.[humidity];
+  }
 }
 
 class rm4pro extends rmpro {
@@ -831,19 +837,25 @@ class rm4pro extends rmpro {
 
   _send = this._sendRM4;
 
-  checkTemperature = async (debug = false) => {
+  checkSensors = async (debug = false) => {
     const packet = new Buffer.from([0x24, 0x00, 0x00, 0x00]);
     const payload = await this._send('checkSensors', packet, debug)
     if (payload) {
-      const temp = (payload[0x0] * 10 + payload[0x1]) / 10.0;
-      const humidity = (payload[0x2] * 100 + payload[0x3]) / 100.0;
-      this.emit('temperature',temp, humidity);
+      const temperature = payload[0x0] + payload[0x1] / 100.0;
+      const humidity = payload[0x2] + payload[0x3] / 100.0;
+      this.emit('temperature',temperature, humidity);
       return {
-        "temperature": temp,
+        "temperature": temperature,
         "humidity": humidity
       }
     }
     return undefined;
+  }
+  checkTemperature = async (debug = false) => {
+    return this.checkSensors()?.temperature;
+  }
+  checkHumidity =  async (debug = false) => {
+    return this.checkSensors()?.humidity;
   }
 
   cancelSweepFrequency = this.cancelLearn;
