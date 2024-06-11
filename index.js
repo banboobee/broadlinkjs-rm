@@ -196,6 +196,7 @@ class Broadlink extends EventEmitter {
   }
 
   onMessage (message, host) {
+    const { debug, log } = this;
     // Broadlink device has responded
     const macAddress = Buffer.alloc(6, 0);
 
@@ -211,6 +212,12 @@ class Broadlink extends EventEmitter {
     if (this.devices[key]) return;
 
     const deviceType = message[0x34] | (message[0x35] << 8);
+    if (debug && log) {
+      const isLocked  = message[0x7F] ? true : false;
+      const name = message.subarray(0x40, 0x40 + message.subarray(0x40).indexOf(0x0)).toString('utf8');
+      
+      log(`\x1b[33m[DEBUG]\x1b[0m address:${key}, type:0x${deviceType.toString(16)}, locked:${isLocked}, name:${name}`);
+    }
 
     // Create a Device instance
     this.addDevice(host, macAddress, deviceType);
@@ -673,8 +680,14 @@ class Device {
     callback();
   })}
 
+  getFWversion = async (debug = false) => {
+    const packet = Buffer.from([0x68]);
+    const payload = await this.sendPacketSync('getFWversion', packet, debug);
+    return payload ? payload[0x4] | payload[0x5] << 8 : undefined;
+  }
+
   _sendRM = async (command, data, debug) => {
-    const payload = await this.sendPacketSync(command,data, debug);
+    const payload = await this.sendPacketSync(command, data, debug);
     return payload ? payload.subarray(4) : null;
   }
 
@@ -736,7 +749,7 @@ class rmpro extends rmmini {
   constructor(log, host, macAddress, deviceType) {
     super(log, host, macAddress, deviceType);
     
-    this.log(`\x1b[35m[INFO]\x1b[0m Adding RF Support to device ${macAddress.toString('hex')} with type ${deviceType.toString(16)}`);
+    this.log(`\x1b[35m[INFO]\x1b[0m Adding RF Support to device ${macAddress.toString('hex')} with type 0x${deviceType.toString(16)}`);
   }
 
   _send = this._sendRM;
