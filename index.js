@@ -216,7 +216,7 @@ class Broadlink extends EventEmitter {
       const isLocked  = message[0x7F] ? true : false;
       const name = message.subarray(0x40, 0x40 + message.subarray(0x40).indexOf(0x0)).toString('utf8');
       
-      log(`\x1b[33m[DEBUG]\x1b[0m address:${key}, type:0x${deviceType.toString(16)}, locked:${isLocked}, name:${name}`);
+      log(`\x1b[33m[DEBUG]\x1b[0m Found Broadlink device. address:${key}, type:0x${deviceType.toString(16)}, locked:${isLocked}, name:${name}`);
     }
 
     // Create a Device instance
@@ -276,7 +276,7 @@ class Broadlink extends EventEmitter {
 
 class Device {
 
-    constructor (log, host, macAddress, deviceType, port) {
+  constructor (log, host, macAddress, deviceType, port) {
     this.host = host;
     this.mac = macAddress;
     this.emitter = new EventEmitter();
@@ -352,35 +352,42 @@ class Device {
       // /*if (debug && response)*/ log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex'), 'command: ', '0x'+response[0x26].toString(16));
       if (debug && response) log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex').substring(0, 0x38*2)+' '+payload.toString('hex'), 'command:', '0x'+command.toString(16), 'ix:', ix);
 
+      if (this.actives.has(ix)) {
+	const command = this.actives.get(ix);
+	this.actives.delete(ix);
+	this.emit(command, err, ix, payload);
+      // }
+      // if (this.onPayloadReceivedSync(err, ix, payload)) {
+      // 	  return;
       // const command = response[0x26];
-      if (command == 0xe9) {
-	if (err != 0) return;
-        this.key = Buffer.alloc(0x10, 0);
-        payload.copy(this.key, 0, 0x04, 0x14);
+      // if (command == 0xe9) {
+      // 	if (err != 0) return;
+      //   this.key = Buffer.alloc(0x10, 0);
+      //   payload.copy(this.key, 0, 0x04, 0x14);
 
-        this.id = Buffer.alloc(0x04, 0);
-        payload.copy(this.id, 0, 0x00, 0x04);
+      //   this.id = Buffer.alloc(0x04, 0);
+      //   payload.copy(this.id, 0, 0x00, 0x04);
 
-        this.emit('deviceReady');
-      } else if (command == 0xee || command == 0xef) {
-        // const payloadHex = payload.toString('hex');
-        // const requestHeaderHex = this.request_header.toString('hex');
+      //   this.emit('deviceReady');
+      // } else if (command == 0xee || command == 0xef) {
+      //   // const payloadHex = payload.toString('hex');
+      //   // const requestHeaderHex = this.request_header.toString('hex');
 
-        // const indexOfHeader = payloadHex.indexOf(requestHeaderHex);
+      //   // const indexOfHeader = payloadHex.indexOf(requestHeaderHex);
 
-        // if (indexOfHeader > -1) {
-        //   payload = payload.slice(indexOfHeader + this.request_header.length, payload.length);
-        // }
-	if (this.onPayloadReceivedSync(err, ix, payload)) {
-	  return;
-	} else {
-          // this.onPayloadReceived(err, payload);	// conventional methods
-          log(`\x1b[31m[ERROR]\x1b[0m Unhandled Command sequence: ${this.mac.toString('hex')}, ${command}, ${payload.toString('hex')}`);
-	}
+      //   // if (indexOfHeader > -1) {
+      //   //   payload = payload.slice(indexOfHeader + this.request_header.length, payload.length);
+      //   // }
+      // 	if (this.onPayloadReceivedSync(err, ix, payload)) {
+      // 	  return;
+      // 	} else {
+      //     // this.onPayloadReceived(err, payload);	// conventional methods
+      //     log(`\x1b[31m[ERROR]\x1b[0m Unhandled Command sequence: ${this.mac.toString('hex')}, ${command}, ${payload.toString('hex')}`);
+      // 	}
       } else if (command == 0x72) {
         log('\x1b[35m[INFO]\x1b[0m Command Acknowledged');
       } else {
-        log('\x1b[33m[DEBUG]\x1b[0m Unhandled Command: ', command);
+        log(`\x1b[33m[DEBUG]\x1b[0m Unhandled Command 0x${command.toString(16)} in a response of Broadlink device. device:${this.mac.toString('hex')}`);
       }
     });
 
@@ -388,6 +395,7 @@ class Device {
   }
 
   authenticate() {
+    const { log, debug } = this;
     const payload = Buffer.alloc(0x50, 0);
 
     payload[0x04] = 0x31;
@@ -415,7 +423,43 @@ class Device {
     payload[0x35] = ' '.charCodeAt(0);
     payload[0x36] = '1'.charCodeAt(0);
 
-    this.sendPacket(0x65, payload);
+    return new Promise((resolve, reject) => {
+      const time0 = new Date();
+      this.sendPacket(0x65, payload, this.debug, async (senderr, ix0) => {
+	const commandx = `auth${ix0}`;
+	this.actives.set(ix0, commandx);
+	if (senderr) {
+	  return reject(`${senderr}`);	// sendPacket error
+	}
+	const timeout = setTimeout(() => {
+	  // this.removeListener(commandx, listener);
+	  this.removeAllListeners(commandx);
+	  this.actives.delete(ix0);
+	  return reject(`Timed out of 5 second(s) in response. source:${ix0}`);
+	}, 5*1000);
+	const listener = (status, ix, payload) => {
+	  clearTimeout(timeout);
+	  const dt = (new Date() - time0) / 1000;
+	  if (status) {
+	    return reject(`Error response in ${dt.toFixed(2)} sec. source:${ix0}`);
+	  } else {
+            this.key = Buffer.alloc(0x10, 0);
+            payload.copy(this.key, 0, 0x04, 0x14);
+	    
+            this.id = Buffer.alloc(0x04, 0);
+            payload.copy(this.id, 0, 0x00, 0x04);
+	    
+	    if (debug) log(`\x1b[33m[DEBUG]\x1b[0m Broadlink device ${this.mac.toString('hex')} is Successfully authenticated in ${dt.toFixed(2)} sec. soaurce:${ix0}`);
+	    
+            this.emit('deviceReady');
+	    return resolve();
+	  }
+	}
+	await this.once(commandx, listener);
+      });
+    }).catch((e) => {
+      log(`\x1b[31m[ERROR]\x1b[0m Failed to authenticate Broadlink device. ${e} device:${this.mac.toString('hex')}`);
+    });
   }
 
   async sendPacket (command, payload, debug = false, callback = null) {
@@ -486,21 +530,21 @@ class Device {
     })
   }	     
 
-  onPayloadReceivedSync (err, ix, payload) {
-    const param = payload[0];
-    const { log, debug } = this;
+  // onPayloadReceivedSync (err, ix, payload) {
+  //   const param = payload[0];
+  //   const { log, debug } = this;
 
-    // if (debug) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Payload received: ${payload.toString('hex')} param: ${param}`);
+  //   // if (debug) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Payload received: ${payload.toString('hex')} param: ${param}`);
 
-    if (this.actives.has(ix)) {
-      const command = this.actives.get(ix);
-      this.actives.delete(ix);
-      this.emit(command, err, ix, payload);
-      return true;
-    }
+  //   if (this.actives.has(ix)) {
+  //     const command = this.actives.get(ix);
+  //     this.actives.delete(ix);
+  //     this.emit(command, err, ix, payload);
+  //     return true;
+  //   }
 
-    return false;
-  }
+  //   return false;
+  // }
 
   // Externally Accessed Methods
 
@@ -527,18 +571,18 @@ class Device {
 	    const dt = (new Date() - time0) / 1000;
 	    clearTimeout(timeout);
 	    if (status) {
-	      if (debug) log(`\x1b[33m[DEBUG]\x1b[0m Error response of ${command} in ${dt.toFixed(2)} sec. source:${ix0} device:${this.mac.toString('hex')}}`);
+	      if (debug) log(`\x1b[33m[DEBUG]\x1b[0m Error response of ${command} in ${dt.toFixed(2)} sec. source:${ix0} device:${this.mac.toString('hex')}`);
 	      resolve(null);
 	    } else {
-	      if (debug) log(`\x1b[33m[DEBUG]\x1b[0m Succeed response of ${command} in ${dt.toFixed(2)} sec. source:${ix0} device:${this.mac.toString('hex')}.`);
+	      if (debug) log(`\x1b[33m[DEBUG]\x1b[0m Succeed response of ${command} in ${dt.toFixed(2)} sec. source:${ix0} device:${this.mac.toString('hex')}`);
 	      resolve(payload);
 	    }
 	  }
 	  await this.once(commandx, listener);
 	});
       }).catch((e) => {
-	// if (debug) log(`\x1b[31m[ERROR]\x1b[0m Failed to send/receive packet. ${e} Device:${this.mac.toString('hex')} ${x.stack.substring(7)}`);
-	if (debug) log(`\x1b[31m[ERROR]\x1b[0m Failed to send/receive packet. ${e} Device:${this.mac.toString('hex')}`);
+	// if (debug) log(`\x1b[31m[ERROR]\x1b[0m Failed to send/receive packet. ${e} device:${this.mac.toString('hex')} ${x.stack.substring(7)}`);
+	if (debug) log(`\x1b[31m[ERROR]\x1b[0m Failed to send/receive packet. ${e} device:${this.mac.toString('hex')}`);
       })
     })
   }
