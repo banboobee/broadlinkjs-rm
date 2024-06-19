@@ -142,7 +142,7 @@ class Broadlink extends EventEmitter {
 
     const splitIPAddress = ipAddress.split('.');
     const port = socket.address().port;
-    if (debug && log) log(`\x1b[35m[INFO]\x1b[0m Listening for Broadlink devices on ${ipAddress}:${port} (UDP)`);
+    if (debug < 1 && log) log(`\x1b[35m[INFO]\x1b[0m Listening for Broadlink devices on ${ipAddress}:${port} (UDP)`);
 
     const now = new Date();
     const starttime = now.getTime();
@@ -212,7 +212,7 @@ class Broadlink extends EventEmitter {
     if (this.devices[key]) return;
 
     const deviceType = message[0x34] | (message[0x35] << 8);
-    if (debug && log) {
+    if (debug < 2 && log) {
       const isLocked  = message[0x7F] ? true : false;
       const name = message.subarray(0x40, 0x40 + message.subarray(0x40).indexOf(0x0)).toString('utf8');
       
@@ -331,7 +331,7 @@ class Device {
       }
 
       // /*if (debug && response)*/ log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex'), 'command: ', '0x'+response[0x26].toString(16));
-      if (debug && response) log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex').substring(0, 0x38*2)+' '+payload.toString('hex'), 'command:', '0x'+command.toString(16), 'ix:', ix);
+      if (debug < 1 && response) log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex').substring(0, 0x38*2)+' '+payload.toString('hex'), 'command:', '0x'+command.toString(16), 'ix:', ix);
 
       if (this.actives.has(ix)) {
 	const command = this.actives.get(ix);
@@ -340,7 +340,7 @@ class Device {
       } else if (command == 0x72) {
         log('\x1b[35m[INFO]\x1b[0m Command Acknowledged');
       } else {
-        log(`\x1b[33m[DEBUG]\x1b[0m Unhandled Command 0x${command.toString(16)} in a response of Broadlink device. device:${this.mac.toString('hex')}`);
+        log(`\x1b[33m[DEBUG]\x1b[0m Unhandled Command 0x${command.toString(16)} in a response of Broadlink device. device:${this.mac.toString('hex')} payload:${payload.toString('hex')}`);
       }
     });
 
@@ -390,19 +390,19 @@ class Device {
 	  this.actives.delete(ix0);
 	  return reject(`Timed out of 5 second(s) in response. source:${ix0}`);
 	}, 5*1000);
-	const listener = (status, ix, payload) => {
+	const listener = (status, ix, response) => {
 	  clearTimeout(timeout);
 	  const dt = (new Date() - time0) / 1000;
 	  if (status) {
 	    return reject(`Error response in ${dt.toFixed(2)} sec. source:${ix0}`);
 	  } else {
             this.key = Buffer.alloc(0x10, 0);
-            payload.copy(this.key, 0, 0x04, 0x14);
+            response.copy(this.key, 0, 0x04, 0x14);
 	    
             this.id = Buffer.alloc(0x04, 0);
-            payload.copy(this.id, 0, 0x00, 0x04);
+            response.copy(this.id, 0, 0x00, 0x04);
 	    
-	    if (debug) log(`\x1b[33m[DEBUG]\x1b[0m Broadlink device ${this.mac.toString('hex')} is Successfully authenticated in ${dt.toFixed(2)} sec. soaurce:${ix0}`);
+	    if (debug < 2) log(`\x1b[33m[DEBUG]\x1b[0m Broadlink device ${this.mac.toString('hex')} is Successfully authenticated in ${dt.toFixed(2)} sec. soaurce:${ix0}`);
 	    
             this.emit('deviceReady');
 	    return resolve();
@@ -415,7 +415,7 @@ class Device {
     });
   }
 
-  async sendPacket (command, payload, debug = false, callback = null) {
+  async sendPacket (command, payload, debug = undefined, callback = null) {
     const { log, socket } = this;
     //debug = this.debug;
     this.count = (this.count + 1) & 0xffff;
@@ -448,7 +448,7 @@ class Device {
     packet[0x33] = this.id[3];
 
     if (payload){
-      if (debug) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Sending command:${command.toString(16)} with payload: ${payload.toString('hex')}`);
+      if (debug < 1) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Sending command:${command.toString(16)} with payload: ${payload.toString('hex')}`);
       const padPayload = Buffer.alloc(16 - payload.length % 16, 0)
       payload = Buffer.concat([payload, padPayload]);
     }
@@ -475,17 +475,17 @@ class Device {
     packet[0x20] = checksum & 0xff;
     packet[0x21] = checksum >> 8;
 
-    if (debug) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Sending packet: ${packet.toString('hex')} ix:${ix}`);
+    if (debug < 1) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Sending packet: ${packet.toString('hex')} ix:${ix}`);
 
     socket.send(packet, 0, packet.length, this.host.port, this.host.address, (err) => {
-      if (debug && err) log('\x1b[33m[DEBUG]\x1b[0m send packet error', err);
+      if (debug < 2 && err) log('\x1b[33m[DEBUG]\x1b[0m send packet error', err);
       callback?.(err, ix);
     })
   }	     
 
   // Externally Accessed Methods
 
-  async sendPacketSync(command, packet, debug = false) {
+  async sendPacketSync(command, packet, debug = undefined) {
     return await this.que.use(async () => {
       const { log } = this;
       // const x = new Error('Trace:');
@@ -496,69 +496,84 @@ class Device {
 	  this.actives.set(ix0, commandx);
 	  // log(this.actives);
 	  if (senderr) {
-	    return reject(`${senderr}`);	// sendPacket error
+	    return reject(new Error(`${senderr}`));	// sendPacket error
 	  }
 	  const timeout = setTimeout(() => {
 	    // this.removeListener(commandx, listener);
 	    this.removeAllListeners(commandx);
 	    this.actives.delete(ix0);
-	    return reject(`Timed out of 5 second(s) in response to ${command}. source:${ix0}`);
+	    return reject(new Error(`Timed out of 5 second(s) in response to ${command}. source:${ix0}`));
 	  }, 5*1000);
 	  const listener = (status, ix, payload) => {
 	    const dt = (new Date() - time0) / 1000;
 	    clearTimeout(timeout);
 	    if (status) {
-	      if (debug) log(`\x1b[33m[DEBUG]\x1b[0m Error response of ${command} in ${dt.toFixed(2)} sec. source:${ix0} device:${this.mac.toString('hex')}`);
+	      if (debug < 1) log(`\x1b[33m[DEBUG]\x1b[0m Error response of ${command} in ${dt.toFixed(2)} sec. source:${ix0} device:${this.mac.toString('hex')}`);
 	      resolve(null);
 	    } else {
-	      if (debug) log(`\x1b[33m[DEBUG]\x1b[0m Succeed response of ${command} in ${dt.toFixed(2)} sec. source:${ix0} device:${this.mac.toString('hex')}`);
+	      if (debug < 2) log(`\x1b[33m[DEBUG]\x1b[0m Succeed response of ${command} in ${dt.toFixed(2)} sec. source:${ix0} device:${this.mac.toString('hex')}`);
 	      resolve(payload);
 	    }
 	  }
 	  await this.once(commandx, listener);
 	});
-      }).catch((e) => {
+      })
+      /*.catch((e) => {
 	// if (debug) log(`\x1b[31m[ERROR]\x1b[0m Failed to send/receive packet. ${e} device:${this.mac.toString('hex')} ${x.stack.substring(7)}`);
 	if (debug) log(`\x1b[31m[ERROR]\x1b[0m Failed to send/receive packet. ${e} device:${this.mac.toString('hex')}`);
-      })
+      })*/
     })
   }
   
-  ping = async (debug = false) => {await this.que.use(async () => {
+  ping = async (debug = undefined) => {await this.que.use(async () => {
     const packet = Buffer.alloc(0x30, 0);
     packet[0x26] = 0x1;
-    if (debug) this.log('\x1b[33m[DEBUG]\x1b[0m Sending keepalive to', this.host.address,':',this.host.port);
+    if (debug < 1) this.log('\x1b[33m[DEBUG]\x1b[0m Sending keepalive to', this.host.address,':',this.host.port);
     this.socket.send(packet, 0, packet.length, this.host.port, this.host.address, (err) => {
       if (err) {log('\x1b[33m[DEBUG]\x1b[0m send keepalive packet error', err)}
     })
   })}
 
-  pauseWhile = async (callback, debug = false) => {await this.que.use(async () => {
-    if (debug) this.log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Pausing device while the requested operation.`);
+  pauseWhile = async (callback, debug = undefined) => {await this.que.use(async () => {
+    if (debug < 1) this.log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Pausing device while the requested operation.`);
     callback();
   })}
 
-  getFWversion = async (debug = false) => {
-    const packet = Buffer.from([0x68]);
-    const payload = await this.sendPacketSync('getFWversion', packet, debug);
-    return payload ? payload[0x4] | payload[0x5] << 8 : undefined;
+  getFWversion = async (debug = undefined) => {
+    try { 
+      const packet = Buffer.from([0x68]);
+      const payload = await this.sendPacketSync('getFWversion', packet, debug);
+      return payload ? payload[0x4] | payload[0x5] << 8 : undefined;
+    } catch (e) {
+      if (debug < 2) this.log(`\x1b[31m[ERROR]\x1b[0m Failed to get firmware version. ${e} device:${this.mac.toString('hex')}`)
+      return undefined;
+    }
   }
 
   _sendRM = async (command, data, debug) => {
-    const payload = await this.sendPacketSync(command, data, debug);
-    return payload ? payload.subarray(4) : null;
+    try {
+      const payload = await this.sendPacketSync(command, data, debug);
+      return payload ? payload.subarray(4) : null;
+    } catch (e) {
+      throw e;
+    }
   }
 
   _sendRM4 = async (command, data, debug) => {
-    const header = Buffer.alloc(2, 0);
-    header.writeUint16LE(data.length);
-    const packet = Buffer.concat([header, data]);
-    const payload = await this.sendPacketSync(command, packet, debug);
-    if (payload) {
-      const l = payload.readUint16LE(0);
-      return payload.subarray(6, l + 2);
+    try {
+      const header = Buffer.alloc(2, 0);
+      header.writeUint16LE(data.length);
+      const packet = Buffer.concat([header, data]);
+      const payload = await this.sendPacketSync(command, packet, debug);
+      if (payload) {
+	const l = payload.readUint16LE(0);
+	return payload.subarray(6, l + 2);
+      } else {
+	return null;
+      }
+    } catch (e) {
+      throw e;
     }
-    return null;
   }
 }
 
@@ -569,31 +584,50 @@ class rmmini extends Device {
 
   _send = this._sendRM;
 
-  sendData = async (data, debug = false) => {
-    let packet = new Buffer.from([0x02, 0x00, 0x00, 0x00]);
-    packet = Buffer.concat([packet, data]);
-    await this._send('sendData', packet, debug);
+  sendData = async (data, debug = undefined) => {
+    try {
+      let packet = new Buffer.from([0x02, 0x00, 0x00, 0x00]);
+      packet = Buffer.concat([packet, data]);
+      await this._send('sendData', packet, debug);
+      return 0;
+    } catch (e) {
+      this.log(`\x1b[31m[ERROR]\x1b[0m Failed to send HEX code. ${e} device:${this.mac.toString('hex')}`)
+      return -1;
+    }
   }
 
-  enterLearning = async (debug = false) => {
-    const packet = new Buffer.from([0x03, 0x00, 0x00, 0x00]);
-    await this._send('enterLearning', packet, debug);
+  enterLearning = async (debug = undefined) => {
+    try {
+      const packet = new Buffer.from([0x03, 0x00, 0x00, 0x00]);
+      await this._send('enterLearning', packet, debug);
+    } catch (e) {
+      this.log(`\x1b[31m[ERROR]\x1b[0m Failed to enter learning mode. ${e} device:${this.mac.toString('hex')}`)
+    }
   }
 
-  cancelLearn = async (debug = false) => {
-    const packet = new Buffer.from([0x1e, 0x00, 0x00, 0x00]);
-    await this._send('cancelLearning', packet, debug);
+  cancelLearn = async (debug = undefined) => {
+    try {
+      const packet = new Buffer.from([0x1e, 0x00, 0x00, 0x00]);
+      await this._send('cancelLearning', packet, debug);
+    } catch (e) {
+      this.log(`\x1b[31m[ERROR]\x1b[0m Failed to cancel learning mode. ${e} device:${this.mac.toString('hex')}`)
+    }
   }
   cancelLearning = this.cancelLearn;
   
-  checkData = async (debug = false) => {
-    const packet = new Buffer.from([0x04, 0x00, 0x00, 0x00]);
-    const payload = await this._send('checkData', packet, debug)
-    if (payload) {
-      this.emit('rawData', payload);
-      return payload;
+  checkData = async (debug = undefined) => {
+    try {
+      const packet = new Buffer.from([0x04, 0x00, 0x00, 0x00]);
+      const payload = await this._send('checkData', packet, debug)
+      if (payload) {
+	this.emit('rawData', payload);
+	return payload;
+      }
+      return null;
+    } catch (e) {
+      this.log(`\x1b[31m[ERROR]\x1b[0m Failed to capture IR/RF HEX code. ${e} device:${this.mac.toString('hex')}`)
+      return null;
     }
-    return null;
   }
 }
 
@@ -606,51 +640,69 @@ class rmpro extends rmmini {
 
   _send = this._sendRM;
 
-  checkTemperature = async (debug = false) => {
-    const packet = new Buffer.from([0x1, 0x00, 0x00, 0x00]);
-    const payload = await this._send('checkTemperature', packet, debug)
-    if (payload) {
-      const temperture = payload[0x0] + payload[0x1] / 10.0;
-      this.emit('temperature', temperture);
-      return temperture;
+  checkTemperature = async (debug = undefined) => {
+    try {
+      const packet = new Buffer.from([0x1, 0x00, 0x00, 0x00]);
+      const payload = await this._send('checkTemperature', packet, debug)
+      if (payload) {
+	const temperture = payload[0x0] + payload[0x1] / 10.0;
+	this.emit('temperature', temperture);
+	return temperture;
+      }
+      return undefined;
+    } catch (e) {
+      if (debug < 2) this.log(`\x1b[31m[ERROR]\x1b[0m Failed to get temperature from Broadlink device. ${e} device:${this.mac.toString('hex')}`)
+      return undefined;
     }
-    return undefined;
   }
   checkSensors = this.checkTemperature;
   checkHumidity = this.checkTemperature;
   
-  enterRFSweep = async (debug = false) => {
-    const packet = new Buffer.from([0x19, 0x00, 0x00, 0x00]);
-    await this._send('enterRFSweep', packet, debug);
+  enterRFSweep = async (debug = undefined) => {
+    try {
+      const packet = new Buffer.from([0x19, 0x00, 0x00, 0x00]);
+      await this._send('enterRFSweep', packet, debug);
+    } catch (e) {
+      this.log(`\x1b[31m[ERROR]\x1b[0m Failed to enter RF frequency sweeping mode. ${e} device:${this.mac.toString('hex')}`)
+    }
   }
   sweepFrequency = this.enterRFSweep;
 
-  checkRFData = async (debug = false) => {
-    const packet = new Buffer.from([0x1a, 0x00, 0x00, 0x00]);
-    const payload = await this._send('checkFrequency', packet, debug);
-    if (payload) {
-      if (payload[0]) {
-	this.emit('rawRFData', payload);
+  checkRFData = async (debug = undefined) => {
+    try {
+      const packet = new Buffer.from([0x1a, 0x00, 0x00, 0x00]);
+      const payload = await this._send('checkFrequency', packet, debug);
+      if (payload) {
+	if (payload[0]) {
+	  this.emit('rawRFData', payload);
+	}
+	return {
+	  locked: payload[0],
+	  frequency: payload.readUint32LE(1)/1000
+	}
       }
-      return {
-	locked: payload[0],
-	frequency: payload.readUint32LE(1)/1000
-      }
+      return null;
+    } catch (e) {
+      this.log(`\x1b[31m[ERROR]\x1b[0m Failed to find RF frequency. ${e} device:${this.mac.toString('hex')}`)
+      return null;
     }
-    return null;
   }
   checkFrequency = this.checkRFData;
 
-  checkRFData2 = async (frequency, debug = false) => {
-    let packet = new Buffer.from([0x1b, 0x00, 0x00, 0x00]);
-    if (frequency) {
-      const data = Buffer.alloc(4, 0);
-      data.writeUint32LE(Math.round(frequency * 1000));
-      packet = Buffer.concat([packet, data]);
-    }
-    const payload = await this._send('checkRFData2', packet, debug);
-    if (payload) {
-      this.emit('rawRFData2', payload);
+  checkRFData2 = async (frequency, debug = undefined) => {
+    try {
+      let packet = new Buffer.from([0x1b, 0x00, 0x00, 0x00]);
+      if (frequency) {
+	const data = Buffer.alloc(4, 0);
+	data.writeUint32LE(Math.round(frequency * 1000));
+	packet = Buffer.concat([packet, data]);
+      }
+      const payload = await this._send('checkRFData2', packet, debug);
+      if (payload) {
+	this.emit('rawRFData2', payload);
+      }
+    } catch (e) {
+      this.log(`\x1b[31m[ERROR]\x1b[0m Failed to enter RF capturing mode. ${e} device:${this.mac.toString('hex')}`)
     }
   }
   findRFPacket = this.checkRFData2;
@@ -663,24 +715,29 @@ class rm4mini extends rmmini {
 
   _send = this._sendRM4;
 
-  checkSensors = async (debug = false) => {
-    const packet = new Buffer.from([0x24, 0x00, 0x00, 0x00]);
-    const payload = await this._send('checkSensors', packet, debug)
-    if (payload) {
-      const temperature = payload[0x0] + payload[0x1] / 100.0;
-      const humidity = payload[0x2] + payload[0x3] / 100.0;
-      this.emit('temperature',temperature, humidity);
-      return {
-        "temperature": temperture,
-        "humidity": humidity
+  checkSensors = async (debug = undefined) => {
+    try {
+      const packet = new Buffer.from([0x24, 0x00, 0x00, 0x00]);
+      const payload = await this._send('checkSensors', packet, debug)
+      if (payload) {
+	const temperature = payload[0x0] + payload[0x1] / 100.0;
+	const humidity = payload[0x2] + payload[0x3] / 100.0;
+	this.emit('temperature',temperature, humidity);
+	return {
+          "temperature": temperture,
+          "humidity": humidity
+	}
       }
+      return undefined;
+    } catch (e) {
+      if (debug < 2) this.log(`\x1b[31m[ERROR]\x1b[0m Failed to get temperature/humidity from Broadlink device. ${e} device:${this.mac.toString('hex')}`)
+      return undefined;
     }
-    return undefined;
   }
-  checkTemperature = async (debug = false) => {
+  checkTemperature = async (debug = undefined) => {
     this.checkSensors()?.[temperature];
   }
-  checkHumidity =  async (debug = false) => {
+  checkHumidity =  async (debug = undefined) => {
     this.checkSensors()?.[humidity];
   }
 }
@@ -692,24 +749,29 @@ class rm4pro extends rmpro {
 
   _send = this._sendRM4;
 
-  checkSensors = async (debug = false) => {
-    const packet = new Buffer.from([0x24, 0x00, 0x00, 0x00]);
-    const payload = await this._send('checkSensors', packet, debug)
-    if (payload) {
-      const temperature = payload[0x0] + payload[0x1] / 100.0;
-      const humidity = payload[0x2] + payload[0x3] / 100.0;
-      this.emit('temperature',temperature, humidity);
-      return {
-        "temperature": temperature,
-        "humidity": humidity
+  checkSensors = async (debug = undefined) => {
+    try {
+      const packet = new Buffer.from([0x24, 0x00, 0x00, 0x00]);
+      const payload = await this._send('checkSensors', packet, debug)
+      if (payload) {
+	const temperature = payload[0x0] + payload[0x1] / 100.0;
+	const humidity = payload[0x2] + payload[0x3] / 100.0;
+	this.emit('temperature',temperature, humidity);
+	return {
+          "temperature": temperature,
+          "humidity": humidity
+	}
       }
+      return undefined;
+    } catch (e) {
+      if (debug < 2) this.log(`\x1b[31m[ERROR]\x1b[0m Failed to get temperature/humidity from Broadlink device. ${e} device:${this.mac.toString('hex')}`)
+      return undefined;
     }
-    return undefined;
   }
-  checkTemperature = async (debug = false) => {
+  checkTemperature = async (debug = undefined) => {
     return this.checkSensors()?.temperature;
   }
-  checkHumidity =  async (debug = false) => {
+  checkHumidity =  async (debug = undefined) => {
     return this.checkSensors()?.humidity;
   }
 
