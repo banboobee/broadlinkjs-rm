@@ -223,7 +223,7 @@ class Broadlink extends EventEmitter {
     this.addDevice(host, macAddress, deviceType);
   }
 
-  addDevice (host, macAddress, deviceType) {
+  async addDevice (host, macAddress, deviceType) {
     const { log, debug } = this;
 
     if (this.devices[macAddress.toString('hex')]) return;
@@ -269,7 +269,13 @@ class Broadlink extends EventEmitter {
       this.emit('deviceReady', device);
     });
 
-    device.authenticate();
+    for (let i = 0; i < 3; i++) {
+      if (await device.authenticate()) {
+	return;
+      }
+      if (debug < 2) log(`\x1b[31m[ERROR]\x1b[0m Retrying to authenticate Broadlink device (attempt ${i+1}). device:${macAddress.toString('hex')}`);
+    }
+    log(`\x1b[31m[ERROR]\x1b[0m Failed to authenticate Broadlink device with three times attempt. device:${macAddress.toString('hex')}`);
   }
 }
 
@@ -347,7 +353,7 @@ class Device {
     socket.bind();
   }
 
-  authenticate() {
+  async authenticate() {
     const { log, debug } = this;
     const payload = Buffer.alloc(0x50, 0);
 
@@ -382,19 +388,19 @@ class Device {
 	const commandx = `auth${ix0}`;
 	this.actives.set(ix0, commandx);
 	if (senderr) {
-	  return reject(`${senderr}`);	// sendPacket error
+	  reject(`${senderr}`);	// sendPacket error
 	}
 	const timeout = setTimeout(() => {
 	  // this.removeListener(commandx, listener);
 	  this.removeAllListeners(commandx);
 	  this.actives.delete(ix0);
-	  return reject(`Timed out of 5 second(s) in response. source:${ix0}`);
+	  reject(`Timed out of 5 second(s) in response. source:${ix0}`);
 	}, 5*1000);
 	const listener = (status, ix, response) => {
 	  clearTimeout(timeout);
 	  const dt = (new Date() - time0) / 1000;
 	  if (status) {
-	    return reject(`Error response in ${dt.toFixed(2)} sec. source:${ix0}`);
+	    reject(`Error response in ${dt.toFixed(2)} sec. source:${ix0}`);
 	  } else {
             this.key = Buffer.alloc(0x10, 0);
             response.copy(this.key, 0, 0x04, 0x14);
@@ -405,13 +411,14 @@ class Device {
 	    if (debug < 2) log(`\x1b[33m[DEBUG]\x1b[0m Broadlink device ${this.mac.toString('hex')} is Successfully authenticated in ${dt.toFixed(2)} sec. soaurce:${ix0}`);
 	    
             this.emit('deviceReady');
-	    return resolve();
+	    resolve(true);
 	  }
 	}
 	await this.once(commandx, listener);
       });
     }).catch((e) => {
-      log(`\x1b[31m[ERROR]\x1b[0m Failed to authenticate Broadlink device. ${e} device:${this.mac.toString('hex')}`);
+      if (debug < 2) log(`\x1b[31m[ERROR]\x1b[0m Failed to authenticate Broadlink device. ${e} device:${this.mac.toString('hex')}`);
+      return false;
     });
   }
 
@@ -496,13 +503,13 @@ class Device {
 	  this.actives.set(ix0, commandx);
 	  // log(this.actives);
 	  if (senderr) {
-	    return reject(new Error(`${senderr}`));	// sendPacket error
+	    reject(new Error(`${senderr}`));	// sendPacket error
 	  }
 	  const timeout = setTimeout(() => {
 	    // this.removeListener(commandx, listener);
 	    this.removeAllListeners(commandx);
 	    this.actives.delete(ix0);
-	    return reject(new Error(`Timed out of 5 second(s) in response to ${command}. source:${ix0}`));
+	    reject(new Error(`Timed out of 5 second(s) in response to ${command}. source:${ix0}`));
 	  }, 5*1000);
 	  const listener = (status, ix, payload) => {
 	    const dt = (new Date() - time0) / 1000;
