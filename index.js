@@ -212,11 +212,17 @@ class Broadlink extends EventEmitter {
     if (this.devices[key]) return;
 
     const deviceType = message[0x34] | (message[0x35] << 8);
+    const isLocked  = message[0x7F] ? true : false;
     if (debug < 2 && log) {
-      const isLocked  = message[0x7F] ? true : false;
       const name = message.subarray(0x40, 0x40 + message.subarray(0x40).indexOf(0x0)).toString('utf8');
       
       log(`\x1b[33m[DEBUG]\x1b[0m Found Broadlink device. address:${key}, type:0x${deviceType.toString(16)}, locked:${isLocked}, name:${name}`);
+    }
+    if (isLocked) {
+      const mac = macAddress.toString('hex');
+      this.devices[mac] = 'Not Supported';
+      log(`\x1b[35m[INFO]\x1b[0m Discovered \x1b[33mLocked\x1b[0m Broadlink device at ${host?.address} (${mac.match(/[\s\S]{1,2}/g).join(':')}) with type 0x${deviceType.toString(16)}. Unlock to control.`);
+      return;
     }
 
     // Create a Device instance
