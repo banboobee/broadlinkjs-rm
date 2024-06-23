@@ -219,9 +219,9 @@ class Broadlink extends EventEmitter {
       log(`\x1b[33m[DEBUG]\x1b[0m Found Broadlink device. address:${key}, type:0x${deviceType.toString(16)}, locked:${isLocked}, name:${name}`);
     }
     if (isLocked) {
-      const mac = macAddress.toString('hex');
-      this.devices[mac] = 'Not Supported';
-      log(`\x1b[35m[INFO]\x1b[0m Discovered \x1b[33mLocked\x1b[0m Broadlink device at ${host?.address} (${mac.match(/[\s\S]{1,2}/g).join(':')}) with type 0x${deviceType.toString(16)}. Unlock to control.`);
+      this.devices[key] = 'Not Supported';
+      // log(`\x1b[35m[INFO]\x1b[0m Discovered \x1b[33mLocked\x1b[0m Broadlink device at ${host?.address} (${key.match(/[\s\S]{1,2}/g).join(':')}) with type 0x${deviceType.toString(16)}. Unlock to control.`);
+      log(`\x1b[35m[INFO]\x1b[0m Found \x1b[33mLocked\x1b[0m device ${key} with type ${deviceType.toString(16)}. Unlock to control.`);
       return;
     }
 
@@ -394,10 +394,9 @@ class Device {
 	const commandx = `auth${ix0}`;
 	this.actives.set(ix0, commandx);
 	if (senderr) {
-	  reject(`${senderr}`);	// sendPacket error
+	  return reject(`${senderr}`);	// sendPacket error
 	}
 	const timeout = setTimeout(() => {
-	  // this.removeListener(commandx, listener);
 	  this.removeAllListeners(commandx);
 	  this.actives.delete(ix0);
 	  reject(`Timed out of 5 second(s) in response. source:${ix0}`);
@@ -507,12 +506,10 @@ class Device {
 	this.sendPacket(0x6a, packet, debug, async (senderr, ix0) => {
 	  const commandx = `${command}${ix0}`;
 	  this.actives.set(ix0, commandx);
-	  // log(this.actives);
 	  if (senderr) {
-	    reject(new Error(`${senderr}`));	// sendPacket error
+	    return reject(new Error(`${senderr}`));	// sendPacket error
 	  }
 	  const timeout = setTimeout(() => {
-	    // this.removeListener(commandx, listener);
 	    this.removeAllListeners(commandx);
 	    this.actives.delete(ix0);
 	    reject(new Error(`Timed out of 5 second(s) in response to ${command}. source:${ix0}`));
