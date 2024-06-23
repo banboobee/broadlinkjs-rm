@@ -221,7 +221,7 @@ class Broadlink extends EventEmitter {
     if (isLocked) {
       this.devices[key] = 'Not Supported';
       // log(`\x1b[35m[INFO]\x1b[0m Discovered \x1b[33mLocked\x1b[0m Broadlink device at ${host?.address} (${key.match(/[\s\S]{1,2}/g).join(':')}) with type 0x${deviceType.toString(16)}. Unlock to control.`);
-      log(`\x1b[35m[INFO]\x1b[0m Found \x1b[33mLocked\x1b[0m device ${key} with type ${deviceType.toString(16)}. Unlock to control.`);
+      log(`\x1b[35m[INFO]\x1b[0m Skipping \x1b[33mLocked\x1b[0m device ${key} with type 0x${deviceType.toString(16)}. Unlock the device to control.`);
       return;
     }
 
