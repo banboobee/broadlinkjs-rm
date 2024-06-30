@@ -147,50 +147,63 @@ class Broadlink extends EventEmitter {
     const now = new Date();
     const starttime = now.getTime();
 
-    const timezone = now.getTimezoneOffset() / -3600;
+    // const timezone = now.getTimezoneOffset() / -3600;
+    const timezone = now.getTimezoneOffset() / -60;
     const packet = Buffer.alloc(0x30, 0);
 
-    const year = now.getYear();
+    // const year = now.getYear();
+    const year = now.getFullYear();
 
-    if (timezone < 0) {
-      packet[0x08] = 0xff + timezone - 1;
-      packet[0x09] = 0xff;
-      packet[0x0a] = 0xff;
-      packet[0x0b] = 0xff;
-    } else {
-      packet[0x08] = timezone;
-      packet[0x09] = 0;
-      packet[0x0a] = 0;
-      packet[0x0b] = 0;
-    }
+    // if (timezone < 0) {
+    //   packet[0x08] = 0xff + timezone - 1;
+    //   packet[0x09] = 0xff;
+    //   packet[0x0a] = 0xff;
+    //   packet[0x0b] = 0xff;
+    // } else {
+    //   packet[0x08] = timezone;
+    //   packet[0x09] = 0;
+    //   packet[0x0a] = 0;
+    //   packet[0x0b] = 0;
+    // }
+    packet.writeInt32LE(timezone, 0x08);
 
-    packet[0x0c] = year & 0xff;
-    packet[0x0d] = year >> 8;
+    // packet[0x0c] = year & 0xff;
+    // packet[0x0d] = year >> 8;
+    packet.writeInt16LE(year, 0x0c);
     packet[0x0e] = now.getMinutes();
     packet[0x0f] = now.getHours();
 
-    const subyear = year % 100;
-    packet[0x10] = subyear;
+    // const subyear = year % 100;
+    // packet[0x10] = subyear;
+    packet[0x10] = year % 100;
     packet[0x11] = now.getDay();
     packet[0x12] = now.getDate();
-    packet[0x13] = now.getMonth();
-    packet[0x18] = parseInt(splitIPAddress[0]);
-    packet[0x19] = parseInt(splitIPAddress[1]);
-    packet[0x1a] = parseInt(splitIPAddress[2]);
-    packet[0x1b] = parseInt(splitIPAddress[3]);
-    packet[0x1c] = port & 0xff;
-    packet[0x1d] = port >> 8;
+    // packet[0x13] = now.getMonth();
+    packet[0x13] = now.getMonth() + 1;
+    // packet[0x18] = parseInt(splitIPAddress[0]);
+    // packet[0x19] = parseInt(splitIPAddress[1]);
+    // packet[0x1a] = parseInt(splitIPAddress[2]);
+    // packet[0x1b] = parseInt(splitIPAddress[3]);
+    packet[0x18] = parseInt(splitIPAddress[3]);
+    packet[0x19] = parseInt(splitIPAddress[2]);
+    packet[0x1a] = parseInt(splitIPAddress[1]);
+    packet[0x1b] = parseInt(splitIPAddress[0]);
+    // packet[0x1c] = port & 0xff;
+    // packet[0x1d] = port >> 8;
+    packet.writeUint16LE(port, 0x1c);
     packet[0x26] = 6;
 
-    let checksum = 0xbeaf;
+    // let checksum = 0xbeaf;
 
-    for (let i = 0; i < packet.length; i++) {
-      checksum += packet[i];
-    }
+    // for (let i = 0; i < packet.length; i++) {
+    //   checksum += packet[i];
+    // }
 
-    checksum = checksum & 0xffff;
-    packet[0x20] = checksum & 0xff;
-    packet[0x21] = checksum >> 8;
+    // checksum = checksum & 0xffff;
+    // packet[0x20] = checksum & 0xff;
+    // packet[0x21] = checksum >> 8;
+    let checksum = packet.reduce((x, y) => {return x + y}, 0xbeaf) & 0xffff;
+    packet.writeUint16LE(checksum, 0x20);
 
     socket.sendto(packet, 0, packet.length, 80, '255.255.255.255');
   }
@@ -215,8 +228,9 @@ class Broadlink extends EventEmitter {
     const isLocked  = message[0x7F] ? true : false;
     if (debug < 2 && log) {
       const name = message.subarray(0x40, 0x40 + message.subarray(0x40).indexOf(0x0)).toString('utf8');
+      const ip = message.subarray(0x36, 0x3A);
       
-      log(`\x1b[33m[DEBUG]\x1b[0m Found Broadlink device. address:${key}, type:0x${deviceType.toString(16)}, locked:${isLocked}, name:${name}`);
+      log(`\x1b[33m[DEBUG]\x1b[0m Found Broadlink device. address:${ip[3]}.${ip[2]}.${ip[1]}.${ip[0]}, type:0x${deviceType.toString(16)}, locked:${isLocked}, name:${name}`);
     }
     if (isLocked) {
       this.devices[key] = 'Not Supported';
@@ -443,11 +457,13 @@ class Device {
     packet[0x05] = 0xa5;
     packet[0x06] = 0xaa;
     packet[0x07] = 0x55;
-    packet[0x24] = this.type & 0xff
-    packet[0x25] = this.type >> 8
+    // packet[0x24] = this.type & 0xff
+    // packet[0x25] = this.type >> 8
+    packet.writeUint16LE(this.type, 0x24);
     packet[0x26] = command;
-    packet[0x28] = this.count & 0xff;
-    packet[0x29] = this.count >> 8;
+    // packet[0x28] = this.count & 0xff;
+    // packet[0x29] = this.count >> 8;
+    packet.writeUint16LE(this.count, 0x28);
     packet[0x2a] = this.mac[5]
     packet[0x2b] = this.mac[4]
     packet[0x2c] = this.mac[3]
@@ -465,27 +481,31 @@ class Device {
       payload = Buffer.concat([payload, padPayload]);
     }
 
-    let checksum = 0xbeaf;
-    for (let i = 0; i < payload.length; i++) {
-      checksum += payload[i];
-    }
-    checksum = checksum & 0xffff;
+    // let checksum = 0xbeaf;
+    // for (let i = 0; i < payload.length; i++) {
+    //   checksum += payload[i];
+    // }
+    // checksum = checksum & 0xffff;
 
-    packet[0x34] = checksum & 0xff;
-    packet[0x35] = checksum >> 8;
+    // packet[0x34] = checksum & 0xff;
+    // packet[0x35] = checksum >> 8;
+    let checksum = payload.reduce((x, y) => {return x + y}, 0xbeaf) & 0xffff;
+    packet.writeUint16LE(checksum, 0x34);
 
     const cipher = crypto.createCipheriv('aes-128-cbc', this.key, this.iv);
     payload = cipher.update(payload);
 
     packet = Buffer.concat([packet, payload]);
 
-    checksum = 0xbeaf;
-    for (let i = 0; i < packet.length; i++) {
-      checksum += packet[i];
-    }
-    checksum = checksum & 0xffff;
-    packet[0x20] = checksum & 0xff;
-    packet[0x21] = checksum >> 8;
+    // checksum = 0xbeaf;
+    // for (let i = 0; i < packet.length; i++) {
+    //   checksum += packet[i];
+    // }
+    // checksum = checksum & 0xffff;
+    // packet[0x20] = checksum & 0xff;
+    // packet[0x21] = checksum >> 8;
+    checksum = packet.reduce((x, y) => {return x + y}, 0xbeaf) & 0xffff;
+    packet.writeUint16LE(checksum, 0x20);
 
     if (debug < 1) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Sending packet: ${packet.toString('hex')} ix:${ix}`);
 
