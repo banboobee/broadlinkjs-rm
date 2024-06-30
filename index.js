@@ -224,7 +224,8 @@ class Broadlink extends EventEmitter {
     const key = macAddress.toString('hex');
     if (this.devices[key]) return;
 
-    const deviceType = message[0x34] | (message[0x35] << 8);
+    // const deviceType = message[0x34] | (message[0x35] << 8);
+    const deviceType = message.readUint16LE(0x34);
     const isLocked  = message[0x7F] ? true : false;
     if (debug < 2 && log) {
       const name = message.subarray(0x40, 0x40 + message.subarray(0x40).indexOf(0x0)).toString('utf8');
@@ -340,8 +341,10 @@ class Device {
       response.copy(encryptedPayload, 0, 0x38);
 
       const command = response[0x26];
-      const err = response[0x22] | (response[0x23] << 8);
-      const ix = response[0x28] | (response[0x29] << 8);
+      // const err = response[0x22] | (response[0x23] << 8);
+      // const ix = response[0x28] | (response[0x29] << 8);
+      const err = response.readUint16LE(0x22);
+      const ix = response.readUint16LE(0x28);
 
       const decipher = crypto.createDecipheriv('aes-128-cbc', this.key, this.iv);
       decipher.setAutoPadding(false);
@@ -357,14 +360,18 @@ class Device {
       }
 
       // /*if (debug && response)*/ log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex'), 'command: ', '0x'+response[0x26].toString(16));
-      if (debug < 1 && response) log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex').substring(0, 0x38*2)+' '+payload.toString('hex'), 'command:', '0x'+command.toString(16), 'ix:', ix);
+      if (this.debug < 1 && response) log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex').substring(0, 0x38*2)+' '+payload.toString('hex'), 'command:', '0x'+command.toString(16), 'ix:', ix);
 
       if (this.actives.has(ix)) {
 	const command = this.actives.get(ix);
 	this.actives.delete(ix);
 	this.emit(command, err, ix, payload);
       } else if (command == 0x72) {
-        log('\x1b[35m[INFO]\x1b[0m Command Acknowledged');
+	if (this.debug < 2) {
+          log(`\x1b[35m[INFO]\x1b[0m Command Acknowledged. source:${ix} device:${this.mac.toString('hex')} payload:${payload.toString('hex')}`);
+	} else {
+          log('\x1b[35m[INFO]\x1b[0m Command Acknowledged');
+	}
       } else {
         log(`\x1b[33m[DEBUG]\x1b[0m Unhandled Command 0x${command.toString(16)} in a response of Broadlink device. device:${this.mac.toString('hex')} payload:${payload.toString('hex')}`);
       }
@@ -573,7 +580,8 @@ class Device {
     try { 
       const packet = Buffer.from([0x68]);
       const payload = await this.sendPacketSync('getFWversion', packet, debug);
-      return payload ? payload[0x4] | payload[0x5] << 8 : undefined;
+      // return payload ? payload[0x4] | payload[0x5] << 8 : undefined;
+      return payload ? payload.readUint16LE(0x04) : undefined;
     } catch (e) {
       if (debug < 2) this.log(`\x1b[31m[ERROR]\x1b[0m Failed to get firmware version. ${e} device:${this.mac.toString('hex')}`)
       return undefined;
