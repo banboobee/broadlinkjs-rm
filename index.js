@@ -95,7 +95,9 @@ class Broadlink extends EventEmitter {
     this.sockets = [];
   }
 
-  discover() {
+  discover({local_ip_address = undefined,
+	    discover_ip_address = '255.255.255.255',
+	    discover_ip_port = 80} = {}) {
     // Close existing sockets
     this.sockets.forEach((socket) => {
       socket.close();
@@ -104,13 +106,13 @@ class Broadlink extends EventEmitter {
     this.sockets = [];
 
     // Open a UDP socket on each network interface/IP address
-    const ipAddresses = this.getIPAddresses();
+    const ipAddresses = local_ip_address ?? this.getIPAddresses();
 
     ipAddresses.forEach((ipAddress) => {
       const socket = dgram.createSocket({ type:'udp4', reuseAddr:true });
       this.sockets.push(socket)
 
-      socket.on('listening', this.onListening.bind(this, socket, ipAddress));
+      socket.on('listening', this.onListening.bind(this, socket, ipAddress, discover_ip_address, discover_ip_port));
       socket.on('message', this.onMessage.bind(this));
 
       socket.bind(0, ipAddress);
@@ -134,13 +136,13 @@ class Broadlink extends EventEmitter {
     return ipAddresses;
   }
 
-  onListening (socket, ipAddress) {
+  onListening (socket, ipAddress, discover_ip_address, discover_ip_port) {
     const { debug, log } = this;
 
     // Broadcase a multicast UDP message to let Broadlink devices know we're listening
     socket.setBroadcast(true);
 
-    const splitIPAddress = ipAddress.split('.');
+    // const splitIPAddress = ipAddress.split('.');
     const port = socket.address().port;
     if (debug < 1 && log) log(`\x1b[35m[INFO]\x1b[0m Listening for Broadlink devices on ${ipAddress}:${port} (UDP)`);
 
@@ -180,18 +182,15 @@ class Broadlink extends EventEmitter {
     packet[0x12] = now.getDate();
     // packet[0x13] = now.getMonth();
     packet[0x13] = now.getMonth() + 1;
-    // packet[0x18] = parseInt(splitIPAddress[0]);
-    // packet[0x19] = parseInt(splitIPAddress[1]);
-    // packet[0x1a] = parseInt(splitIPAddress[2]);
-    // packet[0x1b] = parseInt(splitIPAddress[3]);
-    packet[0x18] = parseInt(splitIPAddress[3]);
-    packet[0x19] = parseInt(splitIPAddress[2]);
-    packet[0x1a] = parseInt(splitIPAddress[1]);
-    packet[0x1b] = parseInt(splitIPAddress[0]);
+    // packet[0x18] = parseInt(splitIPAddress[3]);
+    // packet[0x19] = parseInt(splitIPAddress[2]);
+    // packet[0x1a] = parseInt(splitIPAddress[1]);
+    // packet[0x1b] = parseInt(splitIPAddress[0]);
+    packet.set(ipAddress.split('.').reverse(), 0x18);
     // packet[0x1c] = port & 0xff;
     // packet[0x1d] = port >> 8;
     packet.writeUint16LE(port, 0x1c);
-    packet[0x26] = 6;
+    packet[0x26] = 0x06;
 
     // let checksum = 0xbeaf;
 
@@ -205,7 +204,8 @@ class Broadlink extends EventEmitter {
     let checksum = packet.reduce((x, y) => {return x + y}, 0xbeaf) & 0xffff;
     packet.writeUint16LE(checksum, 0x20);
 
-    socket.sendto(packet, 0, packet.length, 80, '255.255.255.255');
+    if (debug < 1 && log) log(`\x1b[33m[DEBUG]\x1b[0m Sending descover: ${packet.toString('hex')}`);
+    socket.sendto(packet, 0, packet.length, discover_ip_port, discover_ip_address);
   }
 
   onMessage (message, host) {
@@ -213,12 +213,14 @@ class Broadlink extends EventEmitter {
     // Broadlink device has responded
     const macAddress = Buffer.alloc(6, 0);
 
-    message.copy(macAddress, 0x00, 0x3F);
-    message.copy(macAddress, 0x01, 0x3E);
-    message.copy(macAddress, 0x02, 0x3D);
-    message.copy(macAddress, 0x03, 0x3C);
-    message.copy(macAddress, 0x04, 0x3B);
-    message.copy(macAddress, 0x05, 0x3A);
+    // message.copy(macAddress, 0x00, 0x3F);
+    // message.copy(macAddress, 0x01, 0x3E);
+    // message.copy(macAddress, 0x02, 0x3D);
+    // message.copy(macAddress, 0x03, 0x3C);
+    // message.copy(macAddress, 0x04, 0x3B);
+    // message.copy(macAddress, 0x05, 0x3A);
+    message.copy(macAddress, 0x00, 0x3A);
+    macAddress.reverse();
 
     // Ignore if we already know about this device
     const key = macAddress.toString('hex');
@@ -229,9 +231,9 @@ class Broadlink extends EventEmitter {
     const isLocked  = message[0x7F] ? true : false;
     if (debug < 2 && log) {
       const name = message.subarray(0x40, 0x40 + message.subarray(0x40).indexOf(0x0)).toString('utf8');
-      const ip = message.subarray(0x36, 0x3A);
+      const ip = [...message.subarray(0x36, 0x3A)].reverse();
       
-      log(`\x1b[33m[DEBUG]\x1b[0m Found Broadlink device. address:${ip[3]}.${ip[2]}.${ip[1]}.${ip[0]}, type:0x${deviceType.toString(16)}, locked:${isLocked}, name:${name}`);
+      log(`\x1b[33m[DEBUG]\x1b[0m Found Broadlink device. address:${ip[0]}.${ip[1]}.${ip[2]}.${ip[3]}, type:0x${deviceType.toString(16)}, locked:${isLocked}, name:${name}`);
     }
     if (isLocked) {
       this.devices[key] = 'Not Supported';
@@ -296,7 +298,7 @@ class Broadlink extends EventEmitter {
       }
       if (debug < 2) log(`\x1b[31m[ERROR]\x1b[0m Retrying to authenticate Broadlink device (attempt ${i+1}). device:${macAddress.toString('hex')}`);
     }
-    log(`\x1b[31m[ERROR]\x1b[0m Failed to authenticate Broadlink device with three times attempt. device:${macAddress.toString('hex')}`);
+    log(`\x1b[31m[ERROR]\x1b[0m Failed to authenticate Broadlink device despite three times attempt. device:${macAddress.toString('hex')}`);
   }
 }
 
@@ -360,11 +362,12 @@ class Device {
       }
 
       // /*if (debug && response)*/ log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex'), 'command: ', '0x'+response[0x26].toString(16));
-      if (this.debug < 1 && response) log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex').substring(0, 0x38*2)+' '+payload.toString('hex'), 'command:', '0x'+command.toString(16), 'ix:', ix);
+      // if (this.debug < 1 && response) log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex').substring(0, 0x38*2)+' '+payload.toString('hex'), 'command:', '0x'+command.toString(16), 'ix:', ix);
 
       if (this.actives.has(ix)) {
-	const command = this.actives.get(ix);
+	const {command, debug} = this.actives.get(ix);
 	this.actives.delete(ix);
+	if (debug < 1 && response) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Respond packet: ${response.subarray(0, 0x39).toString('hex')} ${payload.toString('hex')} ix:${ix}`);
 	this.emit(command, err, ix, payload);
       } else if (command == 0x72) {
 	if (this.debug < 2) {
@@ -413,7 +416,7 @@ class Device {
       const time0 = new Date();
       this.sendPacket(0x65, payload, this.debug, async (senderr, ix0) => {
 	const commandx = `auth${ix0}`;
-	this.actives.set(ix0, commandx);
+	this.actives.set(ix0, {command: commandx, debug: debug});
 	if (senderr) {
 	  return reject(`${senderr}`);	// sendPacket error
 	}
@@ -434,7 +437,7 @@ class Device {
             this.id = Buffer.alloc(0x04, 0);
             response.copy(this.id, 0, 0x00, 0x04);
 	    
-	    if (debug < 2) log(`\x1b[33m[DEBUG]\x1b[0m Broadlink device ${this.mac.toString('hex')} is Successfully authenticated in ${dt.toFixed(2)} sec. soaurce:${ix0}`);
+	    if (debug < 2) log(`\x1b[33m[DEBUG]\x1b[0m Broadlink device ${this.mac.toString('hex')} is Successfully authenticated in ${dt.toFixed(2)} sec. source:${ix0}`);
 	    
             this.emit('deviceReady');
 	    resolve(true);
@@ -456,34 +459,39 @@ class Device {
 
     let packet = Buffer.alloc(0x38, 0);
 
-    packet[0x00] = 0x5a;
-    packet[0x01] = 0xa5;
-    packet[0x02] = 0xaa;
-    packet[0x03] = 0x55;
-    packet[0x04] = 0x5a;
-    packet[0x05] = 0xa5;
-    packet[0x06] = 0xaa;
-    packet[0x07] = 0x55;
+    // packet[0x00] = 0x5a;
+    // packet[0x01] = 0xa5;
+    // packet[0x02] = 0xaa;
+    // packet[0x03] = 0x55;
+    // packet[0x04] = 0x5a;
+    // packet[0x05] = 0xa5;
+    // packet[0x06] = 0xaa;
+    // packet[0x07] = 0x55;
+    packet.set([0x5a, 0xa5, 0xaa, 0x55, 0x5a, 0xa5, 0xaa, 0x55], 0x0),
     // packet[0x24] = this.type & 0xff
     // packet[0x25] = this.type >> 8
     packet.writeUint16LE(this.type, 0x24);
-    packet[0x26] = command;
+    // packet[0x26] = command;
+    // packet[0x27] = 0;
+    packet.writeUint16LE(command, 0x26);
     // packet[0x28] = this.count & 0xff;
     // packet[0x29] = this.count >> 8;
     packet.writeUint16LE(this.count, 0x28);
-    packet[0x2a] = this.mac[5]
-    packet[0x2b] = this.mac[4]
-    packet[0x2c] = this.mac[3]
-    packet[0x2d] = this.mac[2]
-    packet[0x2e] = this.mac[1]
-    packet[0x2f] = this.mac[0]
-    packet[0x30] = this.id[0];
-    packet[0x31] = this.id[1];
-    packet[0x32] = this.id[2];
-    packet[0x33] = this.id[3];
+    // packet[0x2a] = this.mac[5]
+    // packet[0x2b] = this.mac[4]
+    // packet[0x2c] = this.mac[3]
+    // packet[0x2d] = this.mac[2]
+    // packet[0x2e] = this.mac[1]
+    // packet[0x2f] = this.mac[0]
+    packet.set([...this.mac].reverse(), 0x2a);
+    // packet[0x30] = this.id[0];
+    // packet[0x31] = this.id[1];
+    // packet[0x32] = this.id[2];
+    // packet[0x33] = this.id[3];
+    packet.set(this.id, 0x30);
 
     if (payload){
-      if (debug < 1) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Sending command:${command.toString(16)} with payload: ${payload.toString('hex')}`);
+      if (debug < 1) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Sending command: 0x${command.toString(16)} with payload: ${payload.toString('hex')}`);
       const padPayload = Buffer.alloc(16 - payload.length % 16, 0)
       payload = Buffer.concat([payload, padPayload]);
     }
@@ -514,7 +522,7 @@ class Device {
     checksum = packet.reduce((x, y) => {return x + y}, 0xbeaf) & 0xffff;
     packet.writeUint16LE(checksum, 0x20);
 
-    if (debug < 1) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Sending packet: ${packet.toString('hex')} ix:${ix}`);
+    if (debug < 1) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Sending packet: ${packet.subarray(0, 0x39).toString('hex')} ${packet.subarray(0x39).toString('hex')} ix:${ix}`);
 
     socket.send(packet, 0, packet.length, this.host.port, this.host.address, (err) => {
       if (debug < 2 && err) log('\x1b[33m[DEBUG]\x1b[0m send packet error', err);
@@ -532,7 +540,7 @@ class Device {
 	const time0 = new Date();
 	this.sendPacket(0x6a, packet, debug, async (senderr, ix0) => {
 	  const commandx = `${command}${ix0}`;
-	  this.actives.set(ix0, commandx);
+	  this.actives.set(ix0, {command: commandx, debug: debug});
 	  if (senderr) {
 	    return reject(new Error(`${senderr}`));	// sendPacket error
 	  }
@@ -626,7 +634,10 @@ class rmmini extends Device {
     try {
       let packet = new Buffer.from([0x02, 0x00, 0x00, 0x00]);
       packet = Buffer.concat([packet, data]);
-      await this._send('sendData', packet, debug);
+      const payload = await this._send('sendData', packet, debug);
+      if (!payload) {
+	this.log(`\x1b[31m[ERROR]\x1b[0m Failed to send HEX code. Error: null payload response. device:${this.mac.toString('hex')}`);
+      }
       return 0;
     } catch (e) {
       this.log(`\x1b[31m[ERROR]\x1b[0m Failed to send HEX code. ${e} device:${this.mac.toString('hex')}`)
