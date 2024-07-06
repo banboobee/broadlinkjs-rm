@@ -115,7 +115,7 @@ class Broadlink extends EventEmitter {
       socket.on('listening', this.onListening.bind(this, socket, ipAddress, discover_ip_address, discover_ip_port));
       socket.on('message', this.onMessage.bind(this));
 
-      socket.bind(0, ipAddress);
+      socket.bind(0, ipAddress);	// triggers onListening()
     });
   }
 
@@ -142,7 +142,6 @@ class Broadlink extends EventEmitter {
     // Broadcase a multicast UDP message to let Broadlink devices know we're listening
     socket.setBroadcast(true);
 
-    // const splitIPAddress = ipAddress.split('.');
     const port = socket.address().port;
     if (debug < 1 && log) log(`\x1b[35m[INFO]\x1b[0m Listening for Broadlink devices on ${ipAddress}:${port} (UDP)`);
 
@@ -152,55 +151,20 @@ class Broadlink extends EventEmitter {
     // const timezone = now.getTimezoneOffset() / -3600;
     const timezone = now.getTimezoneOffset() / -60;
     const packet = Buffer.alloc(0x30, 0);
-
-    // const year = now.getYear();
     const year = now.getFullYear();
 
-    // if (timezone < 0) {
-    //   packet[0x08] = 0xff + timezone - 1;
-    //   packet[0x09] = 0xff;
-    //   packet[0x0a] = 0xff;
-    //   packet[0x0b] = 0xff;
-    // } else {
-    //   packet[0x08] = timezone;
-    //   packet[0x09] = 0;
-    //   packet[0x0a] = 0;
-    //   packet[0x0b] = 0;
-    // }
     packet.writeInt32LE(timezone, 0x08);
-
-    // packet[0x0c] = year & 0xff;
-    // packet[0x0d] = year >> 8;
     packet.writeInt16LE(year, 0x0c);
     packet[0x0e] = now.getMinutes();
     packet[0x0f] = now.getHours();
-
-    // const subyear = year % 100;
-    // packet[0x10] = subyear;
     packet[0x10] = year % 100;
     packet[0x11] = now.getDay();
     packet[0x12] = now.getDate();
-    // packet[0x13] = now.getMonth();
     packet[0x13] = now.getMonth() + 1;
-    // packet[0x18] = parseInt(splitIPAddress[3]);
-    // packet[0x19] = parseInt(splitIPAddress[2]);
-    // packet[0x1a] = parseInt(splitIPAddress[1]);
-    // packet[0x1b] = parseInt(splitIPAddress[0]);
     packet.set(ipAddress.split('.').reverse(), 0x18);
-    // packet[0x1c] = port & 0xff;
-    // packet[0x1d] = port >> 8;
     packet.writeUint16LE(port, 0x1c);
     packet[0x26] = 0x06;
 
-    // let checksum = 0xbeaf;
-
-    // for (let i = 0; i < packet.length; i++) {
-    //   checksum += packet[i];
-    // }
-
-    // checksum = checksum & 0xffff;
-    // packet[0x20] = checksum & 0xff;
-    // packet[0x21] = checksum >> 8;
     let checksum = packet.reduce((x, y) => {return x + y}, 0xbeaf) & 0xffff;
     packet.writeUint16LE(checksum, 0x20);
 
@@ -213,12 +177,6 @@ class Broadlink extends EventEmitter {
     // Broadlink device has responded
     const macAddress = Buffer.alloc(6, 0);
 
-    // message.copy(macAddress, 0x00, 0x3F);
-    // message.copy(macAddress, 0x01, 0x3E);
-    // message.copy(macAddress, 0x02, 0x3D);
-    // message.copy(macAddress, 0x03, 0x3C);
-    // message.copy(macAddress, 0x04, 0x3B);
-    // message.copy(macAddress, 0x05, 0x3A);
     message.copy(macAddress, 0x00, 0x3A);
     macAddress.reverse();
 
@@ -226,7 +184,6 @@ class Broadlink extends EventEmitter {
     const key = macAddress.toString('hex');
     if (this.devices[key]) return;
 
-    // const deviceType = message[0x34] | (message[0x35] << 8);
     const deviceType = message.readUint16LE(0x34);
     const isLocked  = message[0x7F] ? true : false;
     if (debug < 2 && log) {
@@ -330,21 +287,19 @@ class Device {
 
   // Create a UDP socket to receive messages from the broadlink device.
   setupSocket() {
-    const { log, debug } = this;
+    const { log } = this;
     const socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
     this.socket = socket;
 
     socket.on('message', (response) => {
       if(response.length < 0x39) {
-	/* if (debug) */ log('\x1b[33m[DEBUG]\x1b[0m Incomplete response: ', response.toString('hex'), 'length: ', response.length);
+	log('\x1b[33m[DEBUG]\x1b[0m Incomplete response: ', response.toString('hex'), 'length: ', response.length);
 	return;
       }
       const encryptedPayload = Buffer.alloc(response.length - 0x38, 0);
       response.copy(encryptedPayload, 0, 0x38);
 
       const command = response[0x26];
-      // const err = response[0x22] | (response[0x23] << 8);
-      // const ix = response[0x28] | (response[0x29] << 8);
       const err = response.readUint16LE(0x22);
       const ix = response.readUint16LE(0x28);
 
@@ -357,12 +312,9 @@ class Device {
       if (p2) payload = Buffer.concat([payload, p2]);
 
       if (!payload) {
-	/* if (debug) */ log('\x1b[33m[DEBUG]\x1b[0m Empty payload:', response.toString('hex'), 'command:', '0x'+response[0x26].toString(16), 'error:', '0x'+err.toString(16));
+	log('\x1b[33m[DEBUG]\x1b[0m Empty payload:', response.toString('hex'), 'command:', '0x'+response[0x26].toString(16), 'error:', '0x'+err.toString(16));
 	return false;
       }
-
-      // /*if (debug && response)*/ log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex'), 'command: ', '0x'+response[0x26].toString(16));
-      // if (this.debug < 1 && response) log('\x1b[33m[DEBUG]\x1b[0m Response received: ', response.toString('hex').substring(0, 0x38*2)+' '+payload.toString('hex'), 'command:', '0x'+command.toString(16), 'ix:', ix);
 
       if (this.actives.has(ix)) {
 	const {command, debug} = this.actives.get(ix);
@@ -459,35 +411,11 @@ class Device {
 
     let packet = Buffer.alloc(0x38, 0);
 
-    // packet[0x00] = 0x5a;
-    // packet[0x01] = 0xa5;
-    // packet[0x02] = 0xaa;
-    // packet[0x03] = 0x55;
-    // packet[0x04] = 0x5a;
-    // packet[0x05] = 0xa5;
-    // packet[0x06] = 0xaa;
-    // packet[0x07] = 0x55;
     packet.set([0x5a, 0xa5, 0xaa, 0x55, 0x5a, 0xa5, 0xaa, 0x55], 0x0),
-    // packet[0x24] = this.type & 0xff
-    // packet[0x25] = this.type >> 8
     packet.writeUint16LE(this.type, 0x24);
-    // packet[0x26] = command;
-    // packet[0x27] = 0;
     packet.writeUint16LE(command, 0x26);
-    // packet[0x28] = this.count & 0xff;
-    // packet[0x29] = this.count >> 8;
     packet.writeUint16LE(this.count, 0x28);
-    // packet[0x2a] = this.mac[5]
-    // packet[0x2b] = this.mac[4]
-    // packet[0x2c] = this.mac[3]
-    // packet[0x2d] = this.mac[2]
-    // packet[0x2e] = this.mac[1]
-    // packet[0x2f] = this.mac[0]
     packet.set([...this.mac].reverse(), 0x2a);
-    // packet[0x30] = this.id[0];
-    // packet[0x31] = this.id[1];
-    // packet[0x32] = this.id[2];
-    // packet[0x33] = this.id[3];
     packet.set(this.id, 0x30);
 
     if (payload){
@@ -496,14 +424,6 @@ class Device {
       payload = Buffer.concat([payload, padPayload]);
     }
 
-    // let checksum = 0xbeaf;
-    // for (let i = 0; i < payload.length; i++) {
-    //   checksum += payload[i];
-    // }
-    // checksum = checksum & 0xffff;
-
-    // packet[0x34] = checksum & 0xff;
-    // packet[0x35] = checksum >> 8;
     let checksum = payload.reduce((x, y) => {return x + y}, 0xbeaf) & 0xffff;
     packet.writeUint16LE(checksum, 0x34);
 
@@ -512,13 +432,6 @@ class Device {
 
     packet = Buffer.concat([packet, payload]);
 
-    // checksum = 0xbeaf;
-    // for (let i = 0; i < packet.length; i++) {
-    //   checksum += packet[i];
-    // }
-    // checksum = checksum & 0xffff;
-    // packet[0x20] = checksum & 0xff;
-    // packet[0x21] = checksum >> 8;
     checksum = packet.reduce((x, y) => {return x + y}, 0xbeaf) & 0xffff;
     packet.writeUint16LE(checksum, 0x20);
 
@@ -588,7 +501,6 @@ class Device {
     try { 
       const packet = Buffer.from([0x68]);
       const payload = await this.sendPacketSync('getFWversion', packet, debug);
-      // return payload ? payload[0x4] | payload[0x5] << 8 : undefined;
       return payload ? payload.readUint16LE(0x04) : undefined;
     } catch (e) {
       if (debug < 2) this.log(`\x1b[31m[ERROR]\x1b[0m Failed to get firmware version. ${e} device:${this.mac.toString('hex')}`)
