@@ -148,7 +148,6 @@ class Broadlink extends EventEmitter {
     const now = new Date();
     const starttime = now.getTime();
 
-    // const timezone = now.getTimezoneOffset() / -3600;
     const timezone = now.getTimezoneOffset() / -60;
     const packet = Buffer.alloc(0x30, 0);
     const year = now.getFullYear();
