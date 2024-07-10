@@ -98,6 +98,13 @@ class Broadlink extends EventEmitter {
   discover({local_ip_address = undefined,
 	    discover_ip_address = '255.255.255.255',
 	    discover_ip_port = 80} = {}) {
+
+    if (this.debug === false) {	// Wasting codes, but compatibility for conventional.
+      this.debug = undefined;
+    } else if (this.debug === true) {
+      this.debug = 0;
+    }
+    
     // Close existing sockets
     this.sockets.forEach((socket) => {
       socket.close();
