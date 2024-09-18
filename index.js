@@ -150,7 +150,7 @@ class Broadlink extends EventEmitter {
     socket.setBroadcast(true);
 
     const port = socket.address().port;
-    if (debug < 1 && log) log(`\x1b[35m[INFO]\x1b[0m Listening for Broadlink devices on ${ipAddress}:${port} (UDP)`);
+    this.logs.trace(`Listening for Broadlink devices on ${ipAddress}:${port} (UDP)`);
 
     const now = new Date();
     const starttime = now.getTime();
@@ -174,7 +174,7 @@ class Broadlink extends EventEmitter {
     let checksum = packet.reduce((x, y) => {return x + y}, 0xbeaf) & 0xffff;
     packet.writeUint16LE(checksum, 0x20);
 
-    if (debug < 1 && log) log(`\x1b[33m[DEBUG]\x1b[0m Sending descover: ${packet.toString('hex')}`);
+    this.logs.trace(`Sending descover: ${packet.toString('hex')}`);
     socket.sendto(packet, 0, packet.length, discover_ip_port, discover_ip_address);
   }
 
@@ -196,12 +196,12 @@ class Broadlink extends EventEmitter {
       const name = message.subarray(0x40, 0x40 + message.subarray(0x40).indexOf(0x0)).toString('utf8');
       const ip = [...message.subarray(0x36, 0x3A)].reverse();
       
-      log(`\x1b[33m[DEBUG]\x1b[0m Found Broadlink device. address:${ip[0]}.${ip[1]}.${ip[2]}.${ip[3]}, type:0x${deviceType.toString(16)}, locked:${isLocked}, name:${name}`);
+      this.logs.debug(`Found Broadlink device. address:${ip[0]}.${ip[1]}.${ip[2]}.${ip[3]}, type:0x${deviceType.toString(16)}, locked:${isLocked}, name:${name}`);
     }
     if (isLocked) {
       this.devices[key] = 'Not Supported';
-      // log(`\x1b[35m[INFO]\x1b[0m Discovered \x1b[33mLocked\x1b[0m Broadlink device at ${host?.address} (${key.match(/[\s\S]{1,2}/g).join(':')}) with type 0x${deviceType.toString(16)}. Unlock to control.`);
-      log(`\x1b[35m[INFO]\x1b[0m Skipping \x1b[33mLocked\x1b[0m device ${key} with type 0x${deviceType.toString(16)}. Unlock the device to control.`);
+      // this.logs.info(`Discovered \x1b[33mLocked\x1b[0m Broadlink device at ${host?.address} (${key.match(/[\s\S]{1,2}/g).join(':')}) with type 0x${deviceType.toString(16)}. Unlock to control.`);
+      this.logs.warn(`Skipping \x1b[33mLocked\x1b[0m device ${key} with type 0x${deviceType.toString(16)}. Unlock the device to control.`);
       return;
     }
 
@@ -237,16 +237,16 @@ class Broadlink extends EventEmitter {
     const isKnownDevice = models[deviceType];
 
     if (!isKnownDevice) {
-      log(`\n\x1b[35m[Info]\x1b[0m We've discovered an unknown Broadlink device. This likely won't cause any issues.\n\nPlease raise an issue in the GitHub repository (https://github.com/kiwi-cam/homebridge-broadlink-rm/issues) with details of the type of device and its device type code: "${deviceType.toString(16)}". The device is connected to your network with the IP address "${host.address}".\n`);
+      this.logs.log(`\n\x1b[35m[Info]\x1b[0m We've discovered an unknown Broadlink device. This likely won't cause any issues.\n\nPlease raise an issue in the GitHub repository (https://github.com/kiwi-cam/homebridge-broadlink-rm/issues) with details of the type of device and its device type code: "${deviceType.toString(16)}". The device is connected to your network with the IP address "${host.address}".\n`);
 
       return null;
     }
 
     // The Broadlink device is something we can use.
-    const device = new models[deviceType].class(log, host, macAddress, deviceType)
-    device.log = log;
-    device.debug = debug;
-    device.actives = new Map();
+    const device = new models[deviceType].class(log, host, macAddress, deviceType, debug)
+    // device.log = log;
+    // device.debug = debug;
+    // device.actives = new Map();
 
     this.devices[macAddress.toString('hex')] = device;
 
@@ -259,22 +259,64 @@ class Broadlink extends EventEmitter {
       if (await device.authenticate()) {
 	return;
       }
-      if (debug < 2) log(`\x1b[31m[ERROR]\x1b[0m Retrying to authenticate Broadlink device (attempt ${i+1}). device:${macAddress.toString('hex')}`);
+      this.logs.debug(`Retrying to authenticate Broadlink device (attempt ${i+1}). device:${macAddress.toString('hex')}`);
     }
-    log(`\x1b[31m[ERROR]\x1b[0m Failed to authenticate Broadlink device despite three times attempt. device:${macAddress.toString('hex')}`);
+    this.logs.error(`Failed to authenticate Broadlink device despite three times attempt. device:${macAddress.toString('hex')}`);
+  }
+
+  logs = {
+    log: (format, ...args) => {
+      this.log(format, ...args);
+    },
+    trace: (format, ...args) => {
+      if (this.debug < 1) {
+	format = "%s " + format;
+	this.log(format, `\x1b[90m[TRACE]`, ...args, '\x1b[0m');
+      }
+    },
+    debug: (format, ...args) => {
+      if (this.debug < 2) {
+	format = "%s " + format;
+	this.log(format, `\x1b[90m[DEBUG]`, ...args, '\x1b[0m');
+      }
+    },
+    info: (format, ...args) => {
+      if (this.debug < 3) {
+	format = "%s " + format;
+	this.log(format, `\x1b[35m[INFO]\x1b[0m`, ...args);
+      }
+    },
+    warn: (format, ...args) => {
+      if (this.debug < 4) {
+	format = "%s " + format;
+	this.log(format, `\x1b[33m[WARN]\x1b[0m`, ...args);
+      }
+    },
+    error: (format, ...args) => {
+      // if (this.debug < 5) {
+	format = "%s " + format;
+      this.log(format, `\x1b[31m[ERROR]\x1b[0m`, ...args);
+      // }
+    }
   }
 }
 
 class Device {
 
-  constructor (log, host, macAddress, deviceType, port) {
+  constructor (log, host, macAddress, deviceType, debug) {
+    if (typeof macAddress === 'string') {	// 'hosts' interface
+      macAddress = Buffer.from(macAddress.toLowerCase().replace(/:/g, ''), "hex");
+    }
+
     this.host = host;
     this.mac = macAddress;
     this.emitter = new EventEmitter();
     // this.log = console.log;
     this.log = log;
+    this.debug = debug;
     this.type = deviceType;
     this.model = models[deviceType].model;
+    this.actives = new Map();
     this.que = new Mutex();
 
     this.on = this.emitter.on;
@@ -299,7 +341,7 @@ class Device {
 
     socket.on('message', (response) => {
       if(response.length < 0x39) {
-	log('\x1b[33m[DEBUG]\x1b[0m Incomplete response: ', response.toString('hex'), 'length: ', response.length);
+	this.logs.error(this.debug, 'Incomplete response: ', response.toString('hex'), 'length: ', response.length);
 	return;
       }
       const encryptedPayload = Buffer.alloc(response.length - 0x38, 0);
@@ -318,23 +360,19 @@ class Device {
       if (p2) payload = Buffer.concat([payload, p2]);
 
       if (!payload) {
-	log('\x1b[33m[DEBUG]\x1b[0m Empty payload:', response.toString('hex'), 'command:', '0x'+response[0x26].toString(16), 'error:', '0x'+err.toString(16));
+	this.logs.error(this.debug, 'Empty payload:', response.toString('hex'), 'command:', '0x'+response[0x26].toString(16), 'error:', '0x'+err.toString(16));
 	return false;
       }
 
       if (this.actives.has(ix)) {
 	const {command, debug} = this.actives.get(ix);
 	this.actives.delete(ix);
-	if (debug < 1 && response) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Respond packet: ${response.subarray(0, 0x39).toString('hex')} ${payload.toString('hex')} ix:${ix}`);
+	if (response) this.logs.trace(debug, `respond packet: ${response.subarray(0, 0x39).toString('hex')} ${payload.toString('hex')} ix:${ix}`);
 	this.emit(command, err, ix, payload);
       } else if (command == 0x72) {
-	if (this.debug < 2) {
-          log(`\x1b[35m[INFO]\x1b[0m Command Acknowledged. source:${ix} device:${this.mac.toString('hex')} payload:${payload.toString('hex')}`);
-	} else {
-          log('\x1b[35m[INFO]\x1b[0m Command Acknowledged');
-	}
+        this.logs.debug(this.debug, `command Acknowledged. source:${ix} payload:${payload.toString('hex')}`);
       } else {
-        log(`\x1b[33m[DEBUG]\x1b[0m Unhandled Command 0x${command.toString(16)} in a response of Broadlink device. device:${this.mac.toString('hex')} payload:${payload.toString('hex')}`);
+        this.logs.error(this.debug, `unhandled Command 0x${command.toString(16)} in a response of Broadlink device. payload:${payload.toString('hex')}`);
       }
     });
 
@@ -395,7 +433,7 @@ class Device {
             this.id = Buffer.alloc(0x04, 0);
             response.copy(this.id, 0, 0x00, 0x04);
 	    
-	    if (debug < 2) log(`\x1b[33m[DEBUG]\x1b[0m Broadlink device ${this.mac.toString('hex')} is Successfully authenticated in ${dt.toFixed(2)} sec. source:${ix0}`);
+	    this.logs.debug(debug, `successfully authenticated in ${dt.toFixed(2)} sec. source:${ix0}`);
 	    
             this.emit('deviceReady');
 	    resolve(true);
@@ -404,7 +442,7 @@ class Device {
 	await this.once(commandx, listener);
       });
     }).catch((e) => {
-      if (debug < 2) log(`\x1b[31m[ERROR]\x1b[0m Failed to authenticate Broadlink device. ${e} device:${this.mac.toString('hex')}`);
+      this.logs.debug(debug, `failed to authenticate Broadlink device. ${e}`);
       return false;
     });
   }
@@ -425,7 +463,7 @@ class Device {
     packet.set(this.id, 0x30);
 
     if (payload){
-      if (debug < 1) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Sending command: 0x${command.toString(16)} with payload: ${payload.toString('hex')}`);
+      this.logs.trace(debug, `sending command 0x${command.toString(16)} with payload ${payload.toString('hex')}`);
       const padPayload = Buffer.alloc(16 - payload.length % 16, 0)
       payload = Buffer.concat([payload, padPayload]);
     }
@@ -441,10 +479,10 @@ class Device {
     checksum = packet.reduce((x, y) => {return x + y}, 0xbeaf) & 0xffff;
     packet.writeUint16LE(checksum, 0x20);
 
-    if (debug < 1) log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Sending packet: ${packet.subarray(0, 0x39).toString('hex')} ${packet.subarray(0x39).toString('hex')} ix:${ix}`);
+    this.logs.trace(`sending packet ${packet.subarray(0, 0x39).toString('hex')} ${packet.subarray(0x39).toString('hex')} ix:${ix}`);
 
     socket.send(packet, 0, packet.length, this.host.port, this.host.address, (err) => {
-      if (debug < 2 && err) log('\x1b[33m[DEBUG]\x1b[0m send packet error', err);
+      if (err) this.logs.error(debug, 'send packet error', err);
       callback?.(err, ix);
     })
   }	     
@@ -472,10 +510,10 @@ class Device {
 	    const dt = (new Date() - time0) / 1000;
 	    clearTimeout(timeout);
 	    if (status) {
-	      if (debug < 1) log(`\x1b[33m[DEBUG]\x1b[0m Error response of ${command} in ${dt.toFixed(2)} sec. source:${ix0} device:${this.mac.toString('hex')}`);
+	      this.logs.trace(debug, `error response of ${command} in ${dt.toFixed(2)} sec. source:${ix0}`);
 	      resolve(null);
 	    } else {
-	      if (debug < 2) log(`\x1b[33m[DEBUG]\x1b[0m Succeed response of ${command} in ${dt.toFixed(2)} sec. source:${ix0} device:${this.mac.toString('hex')}`);
+	      this.logs.debug(debug, `succeed response of ${command} in ${dt.toFixed(2)} sec. source:${ix0}`);
 	      resolve(payload);
 	    }
 	  }
@@ -484,7 +522,7 @@ class Device {
       })
       /*.catch((e) => {
 	// if (debug) log(`\x1b[31m[ERROR]\x1b[0m Failed to send/receive packet. ${e} device:${this.mac.toString('hex')} ${x.stack.substring(7)}`);
-	if (debug) log(`\x1b[31m[ERROR]\x1b[0m Failed to send/receive packet. ${e} device:${this.mac.toString('hex')}`);
+	this.logs.error(debug, `failed to send/receive packet. ${e}`);
       })*/
     })
   }
@@ -492,14 +530,14 @@ class Device {
   ping = async (debug = undefined) => {await this.que.use(async () => {
     const packet = Buffer.alloc(0x30, 0);
     packet[0x26] = 0x1;
-    if (debug < 1) this.log('\x1b[33m[DEBUG]\x1b[0m Sending keepalive to', this.host.address,':',this.host.port);
+    this.logs.trace(debug, 'sending keepalive to', this.host.address,':',this.host.port);
     this.socket.send(packet, 0, packet.length, this.host.port, this.host.address, (err) => {
-      if (err) {log('\x1b[33m[DEBUG]\x1b[0m send keepalive packet error', err)}
+      if (err) this.logs.error(debug, '\x1b[33m[DEBUG]\x1b[0m send keepalive packet error', err)
     })
   })}
 
   pauseWhile = async (callback, debug = undefined) => {await this.que.use(async () => {
-    if (debug < 1) this.log(`\x1b[33m[DEBUG]\x1b[0m (${this.mac.toString('hex')}) Pausing device while the requested operation.`);
+    this.logs.trace(debug, `pausing while the requested operation.`);
     callback();
   })}
 
@@ -509,7 +547,7 @@ class Device {
       const payload = await this.sendPacketSync('getFWversion', packet, debug);
       return payload ? payload.readUint16LE(0x04) : undefined;
     } catch (e) {
-      if (debug < 2) this.log(`\x1b[31m[ERROR]\x1b[0m Failed to get firmware version. ${e} device:${this.mac.toString('hex')}`)
+      this.logs.warn(debug, `Failed to get firmware version. ${e}`)
       return undefined;
     }
   }
@@ -539,11 +577,47 @@ class Device {
       throw e;
     }
   }
+
+  logs = {
+    log: (format, ...args) => {
+      this.log && this.log(format, ...args);
+    },
+    trace: (debug, format, ...args) => {
+      if (debug < 1) {
+	format = "%s " + format;
+	this.log && this.log(format, `\x1b[90m[TRACE] ${this.mac ? this.mac.toString('hex').match(/../g).join(':') : ""}`, ...args, '\x1b[0m');
+      }
+    },
+    debug: (debug, format, ...args) => {
+      if (debug < 2) {
+	format = "%s " + format;
+	this.log && this.log(format, `\x1b[90m[DEBUG] ${this.mac ? this.mac.toString('hex').match(/../g).join(':') : ""}`, ...args, '\x1b[0m');
+      }
+    },
+    info: (debug, format, ...args) => {
+      if (debug < 3) {
+	format = "%s " + format;
+	this.log && this.log(format, `\x1b[35m[INFO]\x1b[0m ${this.mac ? this.mac.toString('hex').match(/../g).join(':') : ""}`, ...args);
+      }
+    },
+    warn: (debug, format, ...args) => {
+      if (debug < 4) {
+	format = "%s " + format;
+	this.log && this.log(format, `\x1b[33m[WARN]\x1b[0m ${this.mac ? this.mac.toString('hex').match(/../g).join(':') : ""}`, ...args);
+      }
+    },
+    error: (debug, format, ...args) => {
+      // if (debug < 5) {
+	format = "%s " + format;
+      this.log && this.log(format, `\x1b[31m[ERROR]\x1b[0m ${this.mac ? this.mac.toString('hex').match(/../g).join(':') : ""}`, ...args);
+      // }
+    }
+  }
 }
 
 class rmmini extends Device {
-  constructor(log, host, macAddress, deviceType) {
-    super(log, host, macAddress, deviceType);
+  constructor(log, host, macAddress, deviceType, debug) {
+    super(log, host, macAddress, deviceType, debug);
   }
 
   _send = this._sendRM;
@@ -554,11 +628,11 @@ class rmmini extends Device {
       packet = Buffer.concat([packet, data]);
       const payload = await this._send('sendData', packet, debug);
       if (!payload) {
-	this.log(`\x1b[31m[ERROR]\x1b[0m Failed to send HEX code. Error: null payload response. device:${this.mac.toString('hex')}`);
+	this.logs.error(debug, `failed to send HEX code. Error: null payload response.`);
       }
       return 0;
     } catch (e) {
-      this.log(`\x1b[31m[ERROR]\x1b[0m Failed to send HEX code. ${e} device:${this.mac.toString('hex')}`)
+      this.logs.error(debug, `failed to send HEX code. ${e}`)
       return -1;
     }
   }
@@ -568,7 +642,7 @@ class rmmini extends Device {
       const packet = new Buffer.from([0x03, 0x00, 0x00, 0x00]);
       await this._send('enterLearning', packet, debug);
     } catch (e) {
-      this.log(`\x1b[31m[ERROR]\x1b[0m Failed to enter learning mode. ${e} device:${this.mac.toString('hex')}`)
+      this.logs.error(debug, `failed to enter learning mode. ${e}`)
     }
   }
 
@@ -577,7 +651,7 @@ class rmmini extends Device {
       const packet = new Buffer.from([0x1e, 0x00, 0x00, 0x00]);
       await this._send('cancelLearning', packet, debug);
     } catch (e) {
-      this.log(`\x1b[31m[ERROR]\x1b[0m Failed to cancel learning mode. ${e} device:${this.mac.toString('hex')}`)
+      this.logs.error(debug, `failed to cancel learning mode. ${e}`)
     }
   }
   cancelLearning = this.cancelLearn;
@@ -592,17 +666,17 @@ class rmmini extends Device {
       }
       return null;
     } catch (e) {
-      this.log(`\x1b[31m[ERROR]\x1b[0m Failed to capture IR/RF HEX code. ${e} device:${this.mac.toString('hex')}`)
+      this.logs.error(debug, `failed to capture IR/RF HEX code. ${e}`)
       return null;
     }
   }
 }
 
 class rmpro extends rmmini {
-  constructor(log, host, macAddress, deviceType) {
-    super(log, host, macAddress, deviceType);
+  constructor(log, host, macAddress, deviceType, debug) {
+    super(log, host, macAddress, deviceType, debug);
     
-    this.log(`\x1b[35m[INFO]\x1b[0m Adding RF Support to device ${macAddress.toString('hex')} with type 0x${deviceType.toString(16)}`);
+    this.logs.log(`\x1b[35m[INFO]\x1b[0m Adding RF Support to device ${macAddress.toString('hex')} with type 0x${deviceType.toString(16)}`);
   }
 
   _send = this._sendRM;
@@ -618,7 +692,7 @@ class rmpro extends rmmini {
       }
       return undefined;
     } catch (e) {
-      if (debug < 2) this.log(`\x1b[31m[ERROR]\x1b[0m Failed to get temperature from Broadlink device. ${e} device:${this.mac.toString('hex')}`)
+      this.logs.warn(debug, `failed to get temperature from Broadlink device. ${e}`)
       return undefined;
     }
   }
@@ -630,7 +704,7 @@ class rmpro extends rmmini {
       const packet = new Buffer.from([0x19, 0x00, 0x00, 0x00]);
       await this._send('enterRFSweep', packet, debug);
     } catch (e) {
-      this.log(`\x1b[31m[ERROR]\x1b[0m Failed to enter RF frequency sweeping mode. ${e} device:${this.mac.toString('hex')}`)
+      this.logs.error(debug, `failed to enter RF frequency sweeping mode. ${e}`)
     }
   }
   sweepFrequency = this.enterRFSweep;
@@ -650,7 +724,7 @@ class rmpro extends rmmini {
       }
       return null;
     } catch (e) {
-      this.log(`\x1b[31m[ERROR]\x1b[0m Failed to find RF frequency. ${e} device:${this.mac.toString('hex')}`)
+      this.logs.error(debug, `failed to find RF frequency. ${e}`)
       return null;
     }
   }
@@ -669,49 +743,15 @@ class rmpro extends rmmini {
 	this.emit('rawRFData2', payload);
       }
     } catch (e) {
-      this.log(`\x1b[31m[ERROR]\x1b[0m Failed to enter RF capturing mode. ${e} device:${this.mac.toString('hex')}`)
+      this.logs.error(debug, `failed to enter RF capturing mode. ${e}`)
     }
   }
   findRFPacket = this.checkRFData2;
 }
 
 class rm4mini extends rmmini {
-  constructor(log, host, macAddress, deviceType) {
-    super(log, host, macAddress, deviceType);
-  }
-
-  _send = this._sendRM4;
-
-  checkSensors = async (debug = undefined) => {
-    try {
-      const packet = new Buffer.from([0x24, 0x00, 0x00, 0x00]);
-      const payload = await this._send('checkSensors', packet, debug)
-      if (payload) {
-	const temperature = payload[0x0] + payload[0x1] / 100.0;
-	const humidity = payload[0x2] + payload[0x3] / 100.0;
-	this.emit('temperature',temperature, humidity);
-	return {
-          "temperature": temperture,
-          "humidity": humidity
-	}
-      }
-      return undefined;
-    } catch (e) {
-      if (debug < 2) this.log(`\x1b[31m[ERROR]\x1b[0m Failed to get temperature/humidity from Broadlink device. ${e} device:${this.mac.toString('hex')}`)
-      return undefined;
-    }
-  }
-  checkTemperature = async (debug = undefined) => {
-    this.checkSensors()?.[temperature];
-  }
-  checkHumidity =  async (debug = undefined) => {
-    this.checkSensors()?.[humidity];
-  }
-}
-
-class rm4pro extends rmpro {
-  constructor(log, host, macAddress, deviceType) {
-    super(log, host, macAddress, deviceType);
+    constructor(log, host, macAddress, deviceType, debug) {
+    super(log, host, macAddress, deviceType, debug);
   }
 
   _send = this._sendRM4;
@@ -731,15 +771,49 @@ class rm4pro extends rmpro {
       }
       return undefined;
     } catch (e) {
-      if (debug < 2) this.log(`\x1b[31m[ERROR]\x1b[0m Failed to get temperature/humidity from Broadlink device. ${e} device:${this.mac.toString('hex')}`)
+      this.logs.warn(debug, `failed to get temperature/humidity from Broadlink device. ${e}`)
       return undefined;
     }
   }
   checkTemperature = async (debug = undefined) => {
-    return this.checkSensors()?.temperature;
+    return await this.checkSensors(debug)?.temperature;
   }
   checkHumidity =  async (debug = undefined) => {
-    return this.checkSensors()?.humidity;
+    return await this.checkSensors(debug)?.humidity;
+  }
+}
+
+class rm4pro extends rmpro {
+  constructor(log, host, macAddress, deviceType, debug) {
+    super(log, host, macAddress, deviceType, debug);
+  }
+
+  _send = this._sendRM4;
+
+  checkSensors = async (debug = undefined) => {
+    try {
+      const packet = new Buffer.from([0x24, 0x00, 0x00, 0x00]);
+      const payload = await this._send('checkSensors', packet, debug)
+      if (payload) {
+	const temperature = payload[0x0] + payload[0x1] / 100.0;
+	const humidity = payload[0x2] + payload[0x3] / 100.0;
+	this.emit('temperature',temperature, humidity);
+	return {
+          "temperature": temperature,
+          "humidity": humidity
+	}
+      }
+      return undefined;
+    } catch (e) {
+      this.logs.warn(debug, `failed to get temperature/humidity from Broadlink device. ${e}`)
+      return undefined;
+    }
+  }
+  checkTemperature = async (debug = undefined) => {
+    return await this.checkSensors(debug)?.temperature;
+  }
+  checkHumidity =  async (debug = undefined) => {
+    return await this.checkSensors(debug)?.humidity;
   }
 
   cancelSweepFrequency = this.cancelLearn;
