@@ -192,11 +192,11 @@ class Broadlink extends EventEmitter {
 
     const deviceType = message.readUint16LE(0x34);
     const isLocked  = message[0x7F] ? true : false;
-    if (debug < 2 && log) {
+    if (debug < 1 && log) {
       const name = message.subarray(0x40, 0x40 + message.subarray(0x40).indexOf(0x0)).toString('utf8');
       const ip = [...message.subarray(0x36, 0x3A)].reverse();
       
-      this.logs.debug(`Found Broadlink device. address:${ip[0]}.${ip[1]}.${ip[2]}.${ip[3]}, type:0x${deviceType.toString(16)}, locked:${isLocked}, name:${name}`);
+      this.logs.trace(`Found Broadlink device. address:${ip[0]}.${ip[1]}.${ip[2]}.${ip[3]}, type:0x${deviceType.toString(16)}, locked:${isLocked}, name:${name}`);
     }
     if (isLocked) {
       this.devices[key] = 'Not Supported';
@@ -298,6 +298,18 @@ class Broadlink extends EventEmitter {
       this.log(format, `\x1b[31m[ERROR]\x1b[0m`, ...args);
       // }
     }
+  }
+
+  close = () => {
+    this.sockets.forEach((socket) => {
+      socket.close();
+    })
+    this.sockets = [];
+
+    Object.keys(this.devices).forEach((device) => {
+      this.devices[device].socket.close();
+    })
+    // this.devices = [];
   }
 }
 
@@ -433,7 +445,7 @@ class Device {
             this.id = Buffer.alloc(0x04, 0);
             response.copy(this.id, 0, 0x00, 0x04);
 	    
-	    this.logs.debug(debug, `successfully authenticated in ${dt.toFixed(2)} sec. source:${ix0}`);
+	    this.logs.trace(debug, `successfully authenticated in ${dt.toFixed(2)} sec. source:${ix0}`);
 	    
             this.emit('deviceReady');
 	    resolve(true);
@@ -510,10 +522,10 @@ class Device {
 	    const dt = (new Date() - time0) / 1000;
 	    clearTimeout(timeout);
 	    if (status) {
-	      this.logs.trace(debug, `error response of ${command} in ${dt.toFixed(2)} sec. source:${ix0}`);
+	      this.logs.debug(debug, `error response of ${command} in ${dt.toFixed(2)} sec. source:${ix0}`);
 	      resolve(null);
 	    } else {
-	      this.logs.debug(debug, `succeed response of ${command} in ${dt.toFixed(2)} sec. source:${ix0}`);
+	      this.logs.trace(debug, `succeed response of ${command} in ${dt.toFixed(2)} sec. source:${ix0}`);
 	      resolve(payload);
 	    }
 	  }
@@ -548,6 +560,22 @@ class Device {
       return payload ? payload.readUint16LE(0x04) : undefined;
     } catch (e) {
       this.logs.warn(debug, `Failed to get firmware version. ${e}`)
+      return undefined;
+    }
+  }
+
+  getDeviceName = async (debug = undefined) => {
+    try {
+      const packet = new Buffer.from([0x1, 0x00, 0x00, 0x00]);
+      const payload = await this._send('getDeviceName', packet, debug)
+      if (payload) {
+	const name = payload.subarray(0x48, 0x48 + payload.subarray(0x48).indexOf(0x0)).toString('utf8');
+	const lock = payload[0x87] ? true : false;
+	return {name, lock};
+      }
+      return undefined;
+    } catch (e) {
+      this.logs.warn(debug, `failed to get device name and lock status from Broadlink device. ${e}`)
       return undefined;
     }
   }
