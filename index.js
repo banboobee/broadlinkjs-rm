@@ -88,11 +88,18 @@ const models = {};
 
 class Broadlink extends EventEmitter {
 
-  constructor() {
+  constructor(log = undefined, debug = undefined) {
     super();
-
+    
     this.devices = {};
     this.sockets = [];
+    
+    if (log) {
+      this.log = log;
+    }
+    if (debug) {
+      this.debug = debug;
+    }
   }
 
   discover({local_ip_address = undefined,
@@ -237,7 +244,7 @@ class Broadlink extends EventEmitter {
     const isKnownDevice = models[deviceType];
 
     if (!isKnownDevice) {
-      this.logs.log(`\n\x1b[35m[Info]\x1b[0m We've discovered an unknown Broadlink device. This likely won't cause any issues.\n\nPlease raise an issue in the GitHub repository (https://github.com/kiwi-cam/homebridge-broadlink-rm/issues) with details of the type of device and its device type code: "${deviceType.toString(16)}". The device is connected to your network with the IP address "${host.address}".\n`);
+      this.logs.log(`\n\x1b[35m[Info]\x1b[0m We've discovered an unknown Broadlink device of type code "${deviceType.toString(16)}". The device is connected to your network with the IP address "${host.address}".\n`);
 
       return null;
     }
@@ -251,7 +258,8 @@ class Broadlink extends EventEmitter {
     this.devices[macAddress.toString('hex')] = device;
 
     // Authenticate the device and let others know when it's ready.
-    device.on('deviceReady', () => {
+    device.on('deviceReady', async () => {
+      device.name = (await device.getDeviceName(this.debug))?.name;	// bad practice?
       this.emit('deviceReady', device);
     });
 
@@ -259,7 +267,7 @@ class Broadlink extends EventEmitter {
       if (await device.authenticate()) {
 	return;
       }
-      this.logs.debug(`Retrying to authenticate Broadlink device (attempt ${i+1}). device:${macAddress.toString('hex')}`);
+      this.logs.warn(`Retrying to authenticate Broadlink device (attempt ${i+1}). device:${macAddress.toString('hex')}`);
     }
     this.logs.error(`Failed to authenticate Broadlink device despite three times attempt. device:${macAddress.toString('hex')}`);
   }
@@ -307,9 +315,9 @@ class Broadlink extends EventEmitter {
     this.sockets = [];
 
     Object.keys(this.devices).forEach((device) => {
-      this.devices[device].socket.close();
+      this.devices[device]?.socket.close();
     })
-    // this.devices = [];
+    this.devices = [];
   }
 }
 
@@ -384,7 +392,7 @@ class Device {
       } else if (command == 0x72) {
         this.logs.debug(this.debug, `command Acknowledged. source:${ix} payload:${payload.toString('hex')}`);
       } else {
-        this.logs.error(this.debug, `unhandled Command 0x${command.toString(16)} in a response of Broadlink device. payload:${payload.toString('hex')}`);
+        this.logs.error(this.debug, `unhandled Command 0x${command.toString(16)} in a response of Broadlink device. payload:${payload.toString('hex')} ix:${ix}`);
       }
     });
 
