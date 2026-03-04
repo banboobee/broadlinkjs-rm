@@ -567,7 +567,7 @@ class Device {
       const payload = await this.sendPacketSync('getFWversion', packet, debug);
       return payload ? payload.readUint16LE(0x04) : undefined;
     } catch (e) {
-      this.logs.warn(debug, `Failed to get firmware version. ${e}`)
+      this.logs.warn(debug, `Failed to get device firmware version. ${e}`)
       return undefined;
     }
   }
@@ -583,7 +583,7 @@ class Device {
       }
       return undefined;
     } catch (e) {
-      this.logs.warn(debug, `failed to get device name and lock status from Broadlink device. ${e}`)
+      this.logs.warn(debug, `failed to get device name and lock status. ${e}`)
       return undefined;
     }
   }
@@ -619,33 +619,38 @@ class Device {
       this.log && this.log(format, ...args);
     },
     trace: (debug, format, ...args) => {
+      const name = this.name ?? (this.mac ? this.mac.toString('hex').match(/../g).join(':') : "");
       if (debug < 1) {
 	format = "%s " + format;
-	this.log && this.log(format, `\x1b[90m[TRACE] ${this.mac ? this.mac.toString('hex').match(/../g).join(':') : ""}`, ...args, '\x1b[0m');
+	this.log && this.log(format, `\x1b[90m[TRACE] ${name}`, ...args, '\x1b[0m');
       }
     },
     debug: (debug, format, ...args) => {
+      const name = this.name ?? (this.mac ? this.mac.toString('hex').match(/../g).join(':') : "");
       if (debug < 2) {
 	format = "%s " + format;
-	this.log && this.log(format, `\x1b[90m[DEBUG] ${this.mac ? this.mac.toString('hex').match(/../g).join(':') : ""}`, ...args, '\x1b[0m');
+	this.log && this.log(format, `\x1b[90m[DEBUG] ${name}`, ...args, '\x1b[0m');
       }
     },
     info: (debug, format, ...args) => {
+      const name = this.name ?? (this.mac ? this.mac.toString('hex').match(/../g).join(':') : "");
       if (debug < 3) {
 	format = "%s " + format;
-	this.log && this.log(format, `\x1b[35m[INFO]\x1b[0m ${this.mac ? this.mac.toString('hex').match(/../g).join(':') : ""}`, ...args);
+	this.log && this.log(format, `\x1b[35m[INFO]\x1b[0m ${name}`, ...args);
       }
     },
     warn: (debug, format, ...args) => {
+      const name = this.name ?? (this.mac ? this.mac.toString('hex').match(/../g).join(':') : "");
       if (debug < 4) {
 	format = "%s " + format;
-	this.log && this.log(format, `\x1b[33m[WARN]\x1b[0m ${this.mac ? this.mac.toString('hex').match(/../g).join(':') : ""}`, ...args);
+	this.log && this.log(format, `\x1b[33m[WARN]\x1b[0m ${name}`, ...args);
       }
     },
     error: (debug, format, ...args) => {
+      const name = this.name ?? (this.mac ? this.mac.toString('hex').match(/../g).join(':') : "");
       // if (debug < 5) {
 	format = "%s " + format;
-      this.log && this.log(format, `\x1b[31m[ERROR]\x1b[0m ${this.mac ? this.mac.toString('hex').match(/../g).join(':') : ""}`, ...args);
+	this.log && this.log(format, `\x1b[31m[ERROR]\x1b[0m ${name}`, ...args);
       // }
     }
   }
@@ -728,7 +733,7 @@ class rmpro extends rmmini {
       }
       return undefined;
     } catch (e) {
-      this.logs.warn(debug, `failed to get temperature from Broadlink device. ${e}`)
+      this.logs.warn(debug, `failed to get device temperature. ${e}`)
       return undefined;
     }
   }
@@ -807,7 +812,7 @@ class rm4mini extends rmmini {
       }
       return undefined;
     } catch (e) {
-      this.logs.warn(debug, `failed to get temperature/humidity from Broadlink device. ${e}`)
+      this.logs.warn(debug, `failed to get device temperature/humidity. ${e}`)
       return undefined;
     }
   }
@@ -841,7 +846,7 @@ class rm4pro extends rmpro {
       }
       return undefined;
     } catch (e) {
-      this.logs.warn(debug, `failed to get temperature/humidity from Broadlink device. ${e}`)
+      this.logs.warn(debug, `failed to get device temperature/humidity. ${e}`)
       return undefined;
     }
   }
