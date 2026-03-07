@@ -589,28 +589,20 @@ class Device {
   }
 
   _sendRM = async (command, data, debug) => {
-    try {
-      const payload = await this.sendPacketSync(command, data, debug);
-      return payload ? payload.subarray(4) : null;
-    } catch (e) {
-      throw e;
-    }
+    const payload = await this.sendPacketSync(command, data, debug);
+    return payload ? payload.subarray(4) : null;
   }
 
   _sendRM4 = async (command, data, debug) => {
-    try {
-      const header = Buffer.alloc(2, 0);
-      header.writeUint16LE(data.length);
-      const packet = Buffer.concat([header, data]);
-      const payload = await this.sendPacketSync(command, packet, debug);
-      if (payload) {
-	const l = payload.readUint16LE(0);
-	return payload.subarray(6, l + 2);
-      } else {
-	return null;
-      }
-    } catch (e) {
-      throw e;
+    const header = Buffer.alloc(2, 0);
+    header.writeUint16LE(data.length);
+    const packet = Buffer.concat([header, data]);
+    const payload = await this.sendPacketSync(command, packet, debug);
+    if (payload) {
+      const l = payload.readUint16LE(0);
+      return payload.subarray(6, l + 2);
+    } else {
+      return null;
     }
   }
 
