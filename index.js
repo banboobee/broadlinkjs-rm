@@ -151,7 +151,7 @@ class Broadlink extends EventEmitter {
   }
 
   onListening (socket, ipAddress, discover_ip_address, discover_ip_port) {
-    const { debug, log } = this;
+    // const { debug, log } = this;
 
     // Broadcase a multicast UDP message to let Broadlink devices know we're listening
     socket.setBroadcast(true);
@@ -160,7 +160,7 @@ class Broadlink extends EventEmitter {
     this.logs.trace(`Listening for Broadlink devices on ${ipAddress}:${port} (UDP)`);
 
     const now = new Date();
-    const starttime = now.getTime();
+    // const starttime = now.getTime();
 
     const timezone = now.getTimezoneOffset() / -60;
     const packet = Buffer.alloc(0x30, 0);
@@ -178,7 +178,7 @@ class Broadlink extends EventEmitter {
     packet.writeUint16LE(port, 0x1c);
     packet[0x26] = 0x06;
 
-    let checksum = packet.reduce((x, y) => {return x + y}, 0xbeaf) & 0xffff;
+    const checksum = packet.reduce((x, y) => {return x + y}, 0xbeaf) & 0xffff;
     packet.writeUint16LE(checksum, 0x20);
 
     this.logs.trace(`Sending descover: ${packet.toString('hex')}`);
@@ -355,7 +355,7 @@ class Device {
 
   // Create a UDP socket to receive messages from the broadlink device.
   setupSocket() {
-    const { log } = this;
+    // const { log } = this;
     const socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
     this.socket = socket;
 
@@ -400,7 +400,8 @@ class Device {
   }
 
   async authenticate() {
-    const { log, debug } = this;
+    // const { log, debug } = this;
+    const { debug } = this;
     const payload = Buffer.alloc(0x50, 0);
 
     payload[0x04] = 0x31;
@@ -468,7 +469,8 @@ class Device {
   }
 
   async sendPacket (command, payload, debug = undefined, callback = null) {
-    const { log, socket } = this;
+    // const { log, socket } = this;
+    const { socket } = this;
     //debug = this.debug;
     this.count = (this.count + 1) & 0xffff;
     const ix = this.count;	// save the value before overridden.
@@ -511,7 +513,7 @@ class Device {
 
   async sendPacketSync(command, packet, debug = undefined) {
     return await this.que.use(async () => {
-      const { log } = this;
+      // const { log } = this;
       // const x = new Error('Trace:');
       return await new Promise((resolve, reject) => {
 	const time0 = new Date();
