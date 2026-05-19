@@ -265,6 +265,7 @@ class Broadlink extends EventEmitter {
 
     for (let i = 0; i < 3; i++) {
       if (await device.authenticate()) {
+	this.logs.debug(`Broadlink device ${macAddress.toString('hex')} succeeded in authentication.`);
 	return;
       }
       this.logs.warn(`Retrying to authenticate Broadlink device (attempt ${i+1}). device:${macAddress.toString('hex')}`);
