@@ -193,9 +193,34 @@ class Broadlink extends EventEmitter {
     message.copy(macAddress, 0x00, 0x3A);
     macAddress.reverse();
 
-    // Ignore if we already know about this device
+    // A device we already know about has answered the discovery broadcast. If it
+    // is answering from a different address then DHCP has moved it, so follow it
+    // there and re-authenticate rather than keeping the stale address - the
+    // device is otherwise unreachable until the process is restarted.
     const key = macAddress.toString('hex');
-    if (this.devices[key]) return;
+    const knownDevice = this.devices[key];
+
+    if (knownDevice) {
+      // Unsupported, locked, and still-being-created devices are stored as a
+      // string placeholder, so there is nothing to follow.
+      if (typeof knownDevice === 'object' && knownDevice.host) {
+        if (knownDevice.host.address !== host.address || knownDevice.host.port !== host.port) {
+          this.logs.info(`Device ${key} moved from ${knownDevice.host.address} to ${host.address}. Re-authenticating.`);
+
+          knownDevice.host.address = host.address;
+          knownDevice.host.port = host.port;
+          knownDevice.reauthenticate(true);
+
+          this.emit('deviceMoved', knownDevice);
+        } else if (!knownDevice.authenticated) {
+          // Same address, but the handshake never completed - the device was
+          // probably still booting when it was first added. Try again.
+          knownDevice.reauthenticate();
+        }
+      }
+
+      return;
+    }
 
     const deviceType = message.readUint16LE(0x34);
     const isLocked  = message[0x7F] ? true : false;
@@ -351,6 +376,14 @@ class Device {
     this.iv = new Buffer.from([0x56, 0x2e, 0x17, 0x99, 0x6d, 0x09, 0x3d, 0x28, 0xdd, 0xb3, 0xba, 0x69, 0x5a, 0x2e, 0x6f, 0x58]);
     this.id = new Buffer.from([0, 0, 0, 0]);
 
+    // authenticate() encrypts with this.key, which is replaced by the session
+    // key once the handshake succeeds. Keep the initial values so the device can
+    // be re-authenticated later.
+    this.initialKey = Buffer.from(this.key);
+    this.initialIv = Buffer.from(this.iv);
+    this.authenticated = false;
+    this.lastAuthAttempt = Date.now();
+
     this.setupSocket();
   }
 
@@ -398,6 +431,22 @@ class Device {
     });
 
     socket.bind();
+  }
+
+  // Restart the session against the device's current address. Discovery sends a
+  // broadcast every couple of seconds, so unforced calls are throttled to avoid
+  // starting a second handshake while the first is still in flight.
+  async reauthenticate(force = false) {
+    const now = Date.now();
+    if (!force && this.lastAuthAttempt && (now - this.lastAuthAttempt) < 15000) {return false;}
+    this.lastAuthAttempt = now;
+
+    this.authenticated = false;
+    this.key = Buffer.from(this.initialKey);
+    this.iv = Buffer.from(this.initialIv);
+    this.id = Buffer.alloc(0x04, 0);
+
+    return await this.authenticate();
   }
 
   async authenticate() {
@@ -457,6 +506,7 @@ class Device {
 
             this.logs.trace(debug, `successfully authenticated in ${dt.toFixed(2)} sec. source:${ix0}`);
 
+            this.authenticated = true;
             this.emit('deviceReady');
             resolve(true);
           }
